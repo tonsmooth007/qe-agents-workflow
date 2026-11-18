@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(python3 .claude/scripts/story_state.py:*)",
+      "Bash(python3 .claude/scripts/trace_score.py:*)",
+      "Bash(python3 .claude/scripts/testid_index.py:*)",
+      "Bash(python3 .claude/scripts/robot_summary.py:*)",
+      "Bash(python3 .claude/scripts/run_robot.py:*)",
+      "Bash(python3 .claude/scripts/jira_cli.py get-story:*)",
+      "Bash(python3 .claude/scripts/jira_cli.py download-attachments:*)",
+      "Bash(python3 .claude/scripts/jira_cli.py search-bugs:*)",
+      "Bash(python3 .claude/scripts/jira_cli.py issue-id:*)",
+      "Bash(python3 .claude/scripts/zephyr_cli.py list:*)",
+      "Bash(python3 .claude/scripts/zephyr_cli.py get:*)",
+      "Bash(python3 .claude/scripts/zephyr_cli.py link-bug:*)",
+      "Bash(python3 .claude/scripts/zephyr_cli.py sync-results:*)",
+      "Bash(python3 .claude/scripts/gitlab_cli.py mr-status:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git branch:*)",
+      "Bash(git rev-parse:*)",
+      "Bash(git show:*)",
+      "Bash(git ls-remote:*)"
+    ],
+    "ask": [
+      "Bash(python3 .claude/scripts/jira_cli.py create-bug:*)",
+      "Bash(python .claude/scripts/jira_cli.py create-bug:*)",
+      "Bash(python3 .claude/scripts/jira_cli.py add-comment:*)",
+      "Bash(python .claude/scripts/jira_cli.py add-comment:*)",
+      "Bash(python3 .claude/scripts/gitlab_cli.py create-mr:*)",
+      "Bash(python .claude/scripts/gitlab_cli.py create-mr:*)",
+      "Bash(python3 .claude/scripts/zephyr_cli.py sync:*)",
+      "Bash(python .claude/scripts/zephyr_cli.py sync:*)",
+      "Bash(python3 .claude/scripts/zephyr_cli.py create-cycle:*)",
+      "Bash(python3 .claude/scripts/zephyr_cli.py post-executions:*)",
+      "Bash(git push:*)",
+      "Bash(git commit:*)"
+    ],
+    "deny": [
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(git push --force-with-lease:*)",
+      "Read(./.claude/.env)",
+      "Read(./.env)",
+      "Bash(cat .claude/.env:*)",
+      "Bash(cat .env:*)"
+    ]
+  }
+}

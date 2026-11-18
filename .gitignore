@@ -1,0 +1,15 @@
+# --- QE agent harness (append to the test repo's .gitignore) ---
+.claude/.env
+.env
+.stories/
+results/
+.claude/settings.local.json
+__pycache__/
+*.pyc
+# Robot / Browser library run artefacts
+output.xml
+log.html
+report.html
+browser/
+playwright-log.txt
+.idea/

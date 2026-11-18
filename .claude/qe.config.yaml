@@ -1,0 +1,103 @@
+# =============================================================================
+# QE Agent Harness configuration
+# Lives at <test repo root>/.claude/qe.config.yaml, next to the agents, skills, commands and scripts.
+# Relative paths are resolved against the TEST REPO ROOT (the parent of .claude/), not against .claude/.
+# Secrets NEVER go here — they go in .claude/.env (see .claude/.env.example).
+# =============================================================================
+
+jira:
+  project_key: LOAN                      # TODO: your Jira project key
+  # Custom field holding Acceptance Criteria (e.g. customfield_10050).
+  # Leave null to parse an "Acceptance Criteria" heading out of the description.
+  acceptance_criteria_field: null
+  story_points_field: null               # optional, e.g. customfield_10016
+  bug:
+    # link_mode "child": created as a sub-task-level issue under the story
+    #   (company-managed projects need a sub-task issue type such as "Sub-bug").
+    # link_mode "relates": created as a normal Bug and linked with relates_link_type.
+    default_link_mode: relates
+    child_issue_type: Sub-bug            # TODO: sub-task type used for child bugs
+    issue_type: Bug
+    relates_link_type: Relates
+    default_priority: Medium
+    labels: [qe-automation, found-by-automation]
+    copy_components_from_story: true
+    extra_fields: {}                     # e.g. {customfield_10100: {value: "QA"}}
+
+zephyr:                                  # Zephyr Scale Cloud (API v2)
+  base_url: https://api.zephyrscale.smartbear.com/v2
+  project_key: LOAN                      # TODO: usually same as Jira project key
+  folder_id: null                        # optional folder for new test cases
+  cycle_folder_id: null                  # optional folder for new test cycles
+  default_status: Draft
+  default_priority: Normal
+  labels: [qe-agent]
+  # Map Robot results -> Zephyr execution status names
+  status_map: {PASS: Pass, FAIL: Fail, SKIP: Not Executed}
+  blocked_status: Blocked                # posted for test cases blocked by a locator gap
+  # Robot env -> Zephyr "Environment" name (must exist in Zephyr project settings). Missing = not sent.
+  environment_map: {qa: QA, uat: UAT}
+
+gitlab:
+  project_path: qa/loan-portal-robot-tests   # TODO: this test repo's GitLab path (group/subgroup/repo)
+  target_branch: main
+  branch_prefix: qe/
+  labels: [qe-automation]
+  remove_source_branch: true
+
+traceability:
+  threshold: 75                          # minimum % to pass the static-analysis gate
+  weights: {implemented: 1.0, partial: 0.5, not_found: 0.0}
+
+# -----------------------------------------------------------------------------
+# Application repositories (read-only for the agents). Clone them locally and
+# point to them here. ALSO add the same paths to .claude/settings.local.json
+# "additionalDirectories" so Claude Code may read them.
+# -----------------------------------------------------------------------------
+application_repos:
+  frontend:
+    - name: loan-portal-web
+      path: ../loan-portal-web           # TODO
+      stack: react
+      src_dirs: [src]
+  backend:
+    - name: loan-application-service
+      path: ../loan-application-service  # TODO
+      stack: java-spring
+      src_dirs: [src/main/java, src/main/resources]
+    - name: credit-decision-service
+      path: ../credit-decision-service   # TODO
+      stack: go
+      src_dirs: [.]
+  database:
+    migration_globs:                     # where schema changes live (Flyway/Liquibase/golang-migrate)
+      - "**/db/migration/**/*.sql"
+      - "**/migrations/**/*.sql"
+
+# -----------------------------------------------------------------------------
+# Layout of THIS (Robot Framework) repo — adjust to your existing structure.
+# -----------------------------------------------------------------------------
+test_repo:
+  ui_suites_dir: tests/ui
+  api_suites_dir: tests/api
+  resources_dir: resources
+  page_objects_dir: resources/pages
+  keywords_dir: resources/keywords
+  api_resources_dir: resources/api
+  variables_dir: variables
+  # Only these paths may be staged by the Pull Request agent
+  stageable_paths: [tests, resources, variables, libraries, data]
+
+robot:
+  default_env: qa
+  # Extra args appended to every run. ${env} is substituted with the chosen env.
+  run_args: ["--variable", "ENV:${env}", "--loglevel", "DEBUG:INFO"]
+  rerun_failed: true                     # re-run failures once to detect flakiness
+
+environments:
+  qa:
+    ui_base_url: https://qa.loan-portal.example.com      # TODO
+    api_base_url: https://qa-api.loan-portal.example.com # TODO
+  uat:
+    ui_base_url: https://uat.loan-portal.example.com
+    api_base_url: https://uat-api.loan-portal.example.com

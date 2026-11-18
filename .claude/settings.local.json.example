@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "additionalDirectories": [
+      "../loan-portal-web",
+      "../loan-application-service",
+      "../credit-decision-service"
+    ]
+  }
+}

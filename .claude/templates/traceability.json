@@ -1,0 +1,41 @@
+{
+  "story": "LOAN-123",
+  "generated_at": "2026-01-01T00:00:00Z",
+  "repos_scanned": [
+    {"name": "loan-portal-web", "path": "../loan-portal-web", "head": "<git short sha>", "branch": "<branch>"}
+  ],
+  "criteria": [
+    {
+      "id": "AC-1",
+      "text": "Applicant can enter a loan amount between 1,000 and 50,000",
+      "layer": "both",
+      "status": "implemented",
+      "confidence": "high",
+      "evidence": [
+        {"repo": "loan-portal-web", "file": "src/features/apply/LoanAmountStep.tsx", "line": 42, "what": "min/max validation 1000..50000"},
+        {"repo": "loan-application-service", "file": "src/main/java/.../LoanRequestDto.java", "line": 18, "what": "@Min(1000) @Max(50000) on amount"}
+      ],
+      "notes": "",
+      "gaps": []
+    },
+    {
+      "id": "AC-2",
+      "text": "…",
+      "layer": "api",
+      "status": "partial",
+      "confidence": "medium",
+      "evidence": [{"repo": "credit-decision-service", "file": "internal/handler/decision.go", "line": 77, "what": "endpoint exists, no rejection reason returned"}],
+      "notes": "",
+      "gaps": ["Rejection reason not included in response body"]
+    }
+  ],
+  "discovered": {
+    "api_endpoints": [
+      {"service": "loan-application-service", "method": "POST", "path": "/api/v1/loan-applications", "file": "…Controller.java:55", "request_dto": "LoanRequestDto", "auth": "bearer"}
+    ],
+    "ui_routes": [{"path": "/apply/amount", "component": "LoanAmountStep", "file": "src/routes.tsx:31"}],
+    "testids": ["loan-amount-input", "loan-amount-error", "apply-next-button"],
+    "db_changes": [{"file": "db/migration/V42__add_rejection_reason.sql", "what": "adds rejection_reason column"}]
+  },
+  "score": null
+}

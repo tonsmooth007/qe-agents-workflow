@@ -1,0 +1,8 @@
+# Harness helper-script dependencies (Robot Framework deps stay in the repo's own requirements)
+requests>=2.31
+PyYAML>=6.0
+python-dotenv>=1.0
+# Needed by run_robot.py / robot_summary.py (usually already in the test repo requirements):
+robotframework>=7.0
+robotframework-browser>=18.0
+robotframework-requests>=0.9.7
