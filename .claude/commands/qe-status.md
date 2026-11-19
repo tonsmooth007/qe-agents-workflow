@@ -11,4 +11,7 @@ story→`/qe-story`, traceability→`/qe-trace`, test_cases→`/qe-testcases`, a
 triage→`/qe-triage`, bugs→`/qe-bugs`, pr→`/qe-pr`. If the latest triage still has unresolved
 `test_defect` items, suggest `/qe-automate <KEY> --fix` instead.
 
+If state has `exploration`, also show one line: exploratory verdict, coverage, findings (high), date, and the
+report path. If it doesn't, mention that `/qe-explore <KEY>` is available once the story phase is done.
+
 Do not run any phase.

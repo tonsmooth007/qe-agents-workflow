@@ -15,11 +15,10 @@ every Robot run, so tests can use %{COMS_<ROLE>_USERNAME}. Variables already exp
 from __future__ import annotations
 
 import argparse
-import os
 import subprocess
 import sys
 
-from common import config, die, out, repo_root, story_dir, validate_key, write_json
+from common import config, die, load_test_repo_env as test_repo_env, out, repo_root, story_dir, validate_key, write_json
 
 
 def next_run_dir(key: str, dryrun: bool):
@@ -44,31 +43,6 @@ def base_args(env_name: str) -> list[str]:
     for k, v in envs[env_name].items():
         args += ["--variable", f"{k.upper()}:{v}"]
     return args
-
-
-def test_repo_env() -> dict:
-    """Environment for Robot: this process's env plus the test repo's root .env (RBAC role credentials
-    COMS_<ROLE>_USERNAME/PASSWORD, used in tests as %{...}). Variables already exported in the shell win."""
-    env = dict(os.environ)
-    path = repo_root() / ".env"
-    if not path.is_file():
-        return env
-    try:
-        from dotenv import dotenv_values
-        values = {k: v for k, v in dotenv_values(path).items() if v is not None}
-    except ImportError:
-        values = {}
-        for line in path.read_text(encoding="utf-8", errors="ignore").splitlines():
-            line = line.strip()
-            if line and not line.startswith("#") and "=" in line:
-                k, v = line.split("=", 1)
-                k = k.strip()
-                if k.startswith("export "):
-                    k = k[len("export "):].strip()
-                values[k] = v.strip().strip('"').strip("'")
-    for k, v in values.items():
-        env.setdefault(k, v)
-    return env
 
 
 def run(cmd: list[str]) -> int:

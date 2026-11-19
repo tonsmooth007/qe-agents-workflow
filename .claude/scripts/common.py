@@ -73,6 +73,34 @@ def _load_env(root: Path) -> None:
             os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
 
 
+def load_test_repo_env() -> dict:
+    """This process's env plus the test repo's ROOT .env (RBAC role credentials COMS_<ROLE>_USERNAME/PASSWORD).
+
+    Used by run_robot.py (tests read them as %{...}) and explore_login.py. Variables already exported in the
+    shell win. Callers must never print or log the values.
+    """
+    env_vars = dict(os.environ)
+    path = repo_root() / ".env"
+    if not path.is_file():
+        return env_vars
+    try:
+        from dotenv import dotenv_values
+        values = {k: v for k, v in dotenv_values(path).items() if v is not None}
+    except ImportError:
+        values = {}
+        for line in path.read_text(encoding="utf-8", errors="ignore").splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, v = line.split("=", 1)
+                k = k.strip()
+                if k.startswith("export "):
+                    k = k[len("export "):].strip()
+                values[k] = v.strip().strip('"').strip("'")
+    for k, v in values.items():
+        env_vars.setdefault(k, v)
+    return env_vars
+
+
 def env(name: str, required: bool = True) -> str:
     config()  # ensure .env loaded
     val = os.environ.get(name, "")

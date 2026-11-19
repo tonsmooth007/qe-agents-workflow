@@ -28,6 +28,11 @@ read-only for every agent.**
 | `bugs` | bug | haiku | Human approval required |
 | `pr` | pull-request | haiku | Human approval required |
 
+- **Exploratory testing (standalone, not a phase):** `/qe-explore LOAN-123 [--env qa] [--roles ROLE ...]
+  [--budget n]` runs the `exploratory-tester` subagent (opus). It needs the `story` phase done (better after
+  traceability and test cases). It drives the live UI with the `playwright-cli` skill along charters (ACs plus
+  edge-case heuristics) until every charter is covered or blocked, then writes `explore/report.md` for human
+  review. It is report only: it files nothing in Jira, Zephyr or GitLab.
 - The phase rules (gates, approvals, fix loop) are defined **once**, in `.claude/skills/qe-manager/SKILL.md`. The
   `/qe-*` commands execute the matching section of that file.
 
@@ -42,6 +47,7 @@ read-only for every agent.**
 | `05-results.json`, `05-triage-report.md`, `results/run-N/` | `run_robot.py` + triage (then `zephyr_cli.py sync-results`) | bug, PR |
 | `06-bugs/bug-N.md` | bug (draft) → QE Manager (approval) → `jira_cli.py create-bug` → `zephyr_cli.py link-bug` | PR |
 | `07-mr.md` | pull-request (draft) → QE Manager (approval) → `gitlab_cli.py create-mr` | — |
+| `explore/charters.md`, `session-log.md`, `evidence/`, `report.md` (+ `exploration` in state) | exploratory-tester (`/qe-explore`) | humans (review); test case ideas go to `/qe-testcases` by hand |
 | `SUMMARY.md` | QE Manager | humans |
 
 Templates for every artifact are in `.claude/templates/`. Agents must follow them so the next agent can parse the output.
@@ -57,6 +63,7 @@ Templates for every artifact are in `.claude/templates/`. Agents must follow the
 | `gitlab_cli.py` | mr-status, **create-mr** (approved drafts only) |
 | `trace_score.py` | deterministic traceability score + gate (exit 0 pass / 2 fail) |
 | `testid_index.py` | index of `data-testid`s in the frontend repo(s), with ready-made selectors |
+| `explore_login.py` | logs a `playwright-cli` session in as a role (`--role ROLE --session name`) from the root `.env` without exposing values; only for `exploratory.allowed_envs`; exit 5 credential gap, 3 login config missing, 2 login failed |
 | `run_robot.py` | runs the story's tagged tests (+ rerun of failures, `--dryrun`) → `05-results.json` |
 | `robot_summary.py` | parses output.xml into JSON (failing keyword chain, logs, screenshots) |
 | `qe-doctor.sh` | (bash) checks tools, packages, harness files, git, config, app repos and secrets; `--online` also checks Jira, Zephyr, GitLab and the app URLs. Run it with `bash` (`/qe-doctor`) |
@@ -76,6 +83,8 @@ files, commits or output.
   tests, variable files, `.stories/`, Zephyr, Jira, commits or chat.
 - Type passwords with Browser's `Fill Secret` (`%COMS_<ROLE>_PASSWORD`), and wrap API logins in
   `Set Log Level    NONE`, so values never reach `log.html`.
+- Exploratory sessions log in **only** through `explore_login.py`. Never type credentials with
+  `playwright-cli fill`/`type`, and never inspect the login request, cookies, storage or `state-save` output.
 - A role a test needs but that isn't in the root `.env` is a **credential gap**: tag the test
   `blocked-credentials` and report the variable names to add. Never substitute another role.
 

@@ -153,6 +153,13 @@ elif [ -n "$PYBIN" ] && [ -x "$PYBIN/robot" ]; then
   warn "robot is installed next to $PY but isn't on PATH" "Activate that virtualenv before starting claude, so the agents can run robot"
 else fail "robot CLI not found" "pip install -r requirements-qe.txt (inside your venv)"; fi
 
+if command -v playwright-cli >/dev/null 2>&1; then pass "playwright-cli on PATH (used by /qe-explore)"
+elif command -v npx >/dev/null 2>&1 && npx --no-install playwright --version >/dev/null 2>&1; then
+  pass "Playwright via npx (/qe-explore uses: npx --no-install playwright cli; needs 1.59+)"
+else
+  warn "playwright-cli not found (only /qe-explore needs it)" "npm install -g @playwright/cli@latest"
+fi
+
 if command -v claude >/dev/null 2>&1; then
   pass "Claude Code $(claude --version 2>/dev/null | head -1)"
 else
@@ -205,10 +212,10 @@ fi
 # --------------------------------------------------------------------------- harness files
 section "Harness"
 missing=""
-for a in jira-user-story requirement-traceability zephyr-test-case robot-automation triage bug pull-request; do
+for a in jira-user-story requirement-traceability zephyr-test-case robot-automation triage bug pull-request exploratory-tester; do
   [ -f "$HARNESS/agents/$a.md" ] || missing="$missing $a"
 done
-[ -z "$missing" ] && pass "7 agents in .claude/agents/" || fail "Missing agents:$missing"
+[ -z "$missing" ] && pass "8 agents in .claude/agents/" || fail "Missing agents:$missing"
 
 [ -f "$HARNESS/skills/qe-manager/SKILL.md" ] && pass "QE Manager skill" || fail "Missing .claude/skills/qe-manager/SKILL.md"
 
@@ -319,6 +326,20 @@ for k in ("ui_suites_dir", "api_suites_dir", "resources_dir"):
         emit("PASS", f"test_repo.{k}: {d}")
     elif d:
         emit("WARN", f"test_repo.{k}: {d} does not exist yet", "Fix the path, or let robot-automation create it")
+
+ex = cfg.get("exploratory") or {}
+login = ex.get("login") or {}
+unset = [k for k in ("path", "username_selector", "password_selector", "submit_selector")
+         if not str(login.get(k) or "").strip() or "TODO" in str(login.get(k))]
+if not ex:
+    emit("WARN", "No exploratory section in the config, so /qe-explore can't log in", "Add the exploratory block (see qe.config.yaml)")
+elif unset:
+    emit("WARN", f"exploratory.login not set: {', '.join(unset)} (only /qe-explore needs it)", "Use the login form's data-testids from testid_index.py")
+else:
+    emit("PASS", f"exploratory.login configured ({login['path']})")
+bad = [e for e in (ex.get("allowed_envs") or []) if e not in envs]
+if bad:
+    emit("WARN", f"exploratory.allowed_envs has unknown environments: {bad}")
 
 # ---- application repos
 section("App repos")

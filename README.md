@@ -16,9 +16,14 @@ automated tests, synced results, bugs and a merge request:
  6 bugs          bug                       drafts → HUMAN APPROVES each → Jira (child of / related to the story)
                                            → linked to the failed Zephyr executions
  7 pr            pull-request              commit + MR draft → HUMAN APPROVES → push + GitLab MR
+
+/qe-explore LOAN-123   (standalone, any time after phase 1)
+   exploration   exploratory-tester        charters from ACs + edge-case heuristics → explores the live UI with
+                                           playwright-cli → .stories/LOAN-123/explore/report.md → HUMAN REVIEWS
 ```
 
 You can run the whole flow with `/qe-manager`, or one phase at a time with the `/qe-*` commands.
+`/qe-explore` adds exploratory testing alongside them.
 Everything is saved under `.stories/<KEY>/`, so each story can be worked in its own context window and resumed
 at any point.
 
@@ -33,6 +38,7 @@ at any point.
 | Triage Agent | `.claude/agents/triage.md` | opus | orange | Runs tests, classifies failures, syncs results to Zephyr |
 | Bug Agent | `.claude/agents/bug.md` | haiku | red | Bug drafts with duplicate check (no filing) |
 | Pull Request Agent | `.claude/agents/pull-request.md` | haiku | pink | Diff review, commit, MR draft (no push) |
+| Exploratory Tester | `.claude/agents/exploratory-tester.md` | opus | yellow | Charter-based exploratory testing of the live UI with the `playwright-cli` skill; report for your review (no filing) |
 
 **Why the QE Manager is a skill, not a subagent:** Claude Code subagents can't start other subagents, so the
 orchestrator has to run in the main conversation. Each worker runs in its own context and returns a summary
@@ -70,6 +76,8 @@ of 15 lines or fewer, which keeps the main session small.
    - `gitlab`: this repo's project path and target branch.
    - `application_repos`: **local paths to the React, Go and Spring Boot repos**, plus where the migrations live.
    - `test_repo`: your suite and resource folder layout. `environments`: the UI and API base URLs per environment.
+   - `exploratory` (only for `/qe-explore`): `allowed_envs` (never production), `budget_actions`, and the
+     login form's `data-testid` selectors under `login` (`testid_index.py` lists them).
 5. `cp .claude/settings.local.json.example .claude/settings.local.json` and list the same application repo
    paths under `additionalDirectories`, so Claude Code is allowed to read them.
 6. Run the doctor until it reports no failures:
@@ -88,8 +96,11 @@ of 15 lines or fewer, which keeps the main session small.
    python3 .claude/scripts/zephyr_cli.py list --issue LOAN-123
    python3 .claude/scripts/testid_index.py --filter loan | head -40
    ```
-8. Start Claude Code **from the activated virtualenv** (see the note above). In it, `/agents` should list the 7 agents, and typing `/qe-` should autocomplete `/qe-manager`
-   and the per-phase commands. Restart Claude Code if they don't appear.
+8. Start Claude Code **from the activated virtualenv** (see the note above). In it, `/agents` should list the 8 agents, and typing `/qe-` should autocomplete `/qe-manager`,
+   the per-phase commands and `/qe-explore`. Restart Claude Code if they don't appear.
+9. *(Optional, for `/qe-explore`)* Install the Playwright CLI: `npm install -g @playwright/cli@latest` (or have
+   Playwright 1.59+ in the repo so `npx --no-install playwright cli` works). Then check the login without
+   opening a browser: `python3 .claude/scripts/explore_login.py LOAN-123 --role ADMIN --dry-run`.
 
 ## Daily use: one story per context window
 
@@ -132,13 +143,51 @@ two of them.
   from there, so both ways of running behave the same.
 - **You can also call any agent directly,** e.g. *"use the triage agent on LOAN-123 against uat"*.
 
+### Exploratory testing
+```
+/qe-explore LOAN-123 [--env qa] [--roles LOAN_OFFICER UNDERWRITER] [--budget 150]
+```
+Scripted tests check what was designed in advance. The `exploratory-tester` agent looks for what wasn't. It's
+a standalone command, not a gated phase, so it doesn't change any phase status. It needs phase 1 done, and
+works better after phases 2 and 3: it treats `partial`/`not_found` ACs as high-risk, and it explores around
+the existing test cases instead of repeating them.
+
+1. **Charters** (`explore/charters.md`): at least one positive and one negative or boundary charter per AC.
+   Heuristic charters are added on top:
+   - input boundaries and invalid data;
+   - RBAC, including a role that should be denied and deep links;
+   - back/forward, reload mid-form, double submit, logout then back;
+   - API errors and slow responses forced with `playwright-cli route`;
+   - mobile layout, keyboard-only use, accessible names;
+   - console errors and failed requests.
+2. **Login** per role through `explore_login.py`, which reads the root `.env` so the agent never sees or types a
+   password. A missing role is a credential gap: those charters are blocked, and no other role is used instead.
+3. **Exploration** in a real browser with the `playwright-cli` skill. Every step goes in `explore/session-log.md`,
+   and screenshots in `explore/evidence/`. The `data-testid` of each element used is recorded, so missing ones
+   show up as locator gaps.
+4. **Stop rule:** the verdict is **edge-to-edge covered** only when every charter is covered, blocked or n/a
+   with evidence, and every AC has had a positive and a negative probe. If the action budget runs out first,
+   the verdict is **partial**, and the report lists what wasn't explored and the remaining risk.
+5. **Report:** `.stories/<KEY>/explore/report.md`. It has a coverage matrix and findings, each with:
+   - type (`suspected_defect` · `ux` · `a11y` · `console_error` · `ac_ambiguity`) and severity;
+   - repro steps, and expected (quoted from the AC) vs actual;
+   - evidence;
+   - a reviewer-decision checkbox.
+
+   It also lists locator gaps and test ideas worth automating. `/qe-status` shows the verdict and the report
+   path.
+
+**Report only:** nothing is written to Jira, Zephyr or GitLab. If you confirm findings, ask for them to be
+drafted as bugs (`/qe-bugs` approval rules) or added as test cases (`/qe-testcases`). Exploration runs only
+against `exploratory.allowed_envs`, with synthetic data.
+
 ## Test credentials (RBAC)
 The application uses role-based access control, so tests log in as different roles. There are two `.env` files,
 both git-ignored:
 
 | File | Holds | Used by |
 |---|---|---|
-| `.env` (test repo root) | `COMS_<ROLE>_USERNAME` and `COMS_<ROLE>_PASSWORD`, one pair per role | Robot tests (`%{COMS_<ROLE>_USERNAME}`), loaded into every run by `run_robot.py` |
+| `.env` (test repo root) | `COMS_<ROLE>_USERNAME` and `COMS_<ROLE>_PASSWORD`, one pair per role | Robot tests (`%{COMS_<ROLE>_USERNAME}`), loaded into every run by `run_robot.py`; exploratory logins via `explore_login.py` |
 | `.claude/.env` | Jira, Zephyr Scale and GitLab tokens | the harness scripts |
 
 ```bash
@@ -154,6 +203,9 @@ COMS_UNDERWRITER_PASSWORD=...
   pair is complete.
 - **In tests:** `%{COMS_<ROLE>_USERNAME}` / `%{COMS_<ROLE>_PASSWORD}`, through a role-based login keyword. Passwords
   are typed with `Fill Secret`, and API logins run under `Set Log Level    NONE`, so they never show in `log.html`.
+- **In exploratory sessions:** `explore_login.py --role <ROLE>` fills the login form itself. Its output never
+  contains values, and the agent is told never to type credentials or inspect the login request, cookies or
+  storage. `playwright-cli` may keep its own logs in `.playwright-cli/`, which is git-ignored.
 - **Values stay private:** Claude Code is blocked from reading either `.env`. No username or password is ever
   written into tests, `.stories/`, Zephyr, Jira or commits.
 - **Missing roles:** if a test needs a role that isn't in `.env`, it's tagged `blocked-credentials`, posted to
@@ -202,15 +254,21 @@ What `sync-results` posts:
     (`sync-results`, `link-bug`).
   - **deny:** force-push and reading `.claude/.env`.
 - Every command that writes externally supports `--dry-run`.
+- **Exploratory testing never writes externally.** It's limited to `exploratory.allowed_envs` (enforced by
+  `explore_login.py`), uses synthetic data only, and leaves its findings for you to review. To avoid a
+  prompt on every browser action, allow `Bash(playwright-cli:*)`, `Bash(npx --no-install playwright:*)` and
+  `Bash(python3 .claude/scripts/explore_login.py:*)` in `.claude/settings.json`.
 
 ## Layout
 ```
 <test repo root>/
 ├── .claude/
-│   ├── agents/*.md                7 subagents (each with its model set)
+│   ├── agents/*.md                8 subagents (each with its model set)
 │   ├── skills/qe-manager/         orchestrator skill (full flow, the only source of phase rules)
-│   ├── commands/qe-*.md           one command per phase + /qe-status + /qe-sync-results + /qe-doctor
+│   ├── skills/playwright-cli/     browser automation skill used by the exploratory tester
+│   ├── commands/qe-*.md           one command per phase + /qe-status + /qe-sync-results + /qe-doctor + /qe-explore
 │   ├── scripts/                   Jira / Zephyr Scale / GitLab REST clients, gates, Robot runner/parser, testid index,
+│   │                              explore_login.py (role login for exploratory sessions),
 │   │                              qe-doctor.sh (dependency and config check)
 │   ├── templates/                 artifact templates the agents fill in
 │   ├── qe.config.yaml             non-secret configuration (relative paths resolve from the repo root)
@@ -231,8 +289,9 @@ What `sync-results` posts:
 - **Terminal color per agent:** the `color:` line in each agent's front matter (red, blue, green, yellow,
   purple, orange, pink, cyan).
 - **Model per agent:** the `model:` line in each agent's front matter (`haiku`, `sonnet`, `opus` or `inherit`).
-  - **opus** for requirement-traceability and triage. They need deep reasoning across several repos, and their
-    output decides the gate and whether bugs get filed.
+  - **opus** for requirement-traceability, triage and exploratory-tester. They need deep reasoning (across
+    several repos, or about a live UI), and their output decides the gate, whether bugs get filed, or what you
+    review.
   - **sonnet** for robot-automation, zephyr-test-case and jira-user-story. Strong at code and structured design,
     and these agents run most often.
   - **haiku** for bug and pull-request. They fill in templates from analysis that's already done, and a human
@@ -254,4 +313,8 @@ Start with `.claude/scripts/qe-doctor.sh --online`. It catches most of these.
 | A Robot test is missing in Zephyr | It has no Zephyr key tag (see `unmapped_robot_tests` in the sync output) |
 | The agents can't read the app repos | Add the paths to `.claude/settings.local.json` → `additionalDirectories` |
 | A permission prompt appears on a `--dry-run` | Expected: dry-runs match the same `ask` rule as the real write |
+| `/qe-explore` stops: `explore_login.py` exit 3 | `exploratory.login` selectors are still `TODO`. Fill them from `testid_index.py` |
+| `/qe-explore` stops: exit 4 | The environment isn't in `exploratory.allowed_envs` |
+| `explore_login.py` exit 5 / exit 2 | 5: the role's `COMS_<ROLE>_*` pair is missing in the root `.env`. 2: the login didn't leave the login page (check the account, or set `login.success_selector`) |
+| `playwright-cli not found` | `npm install -g @playwright/cli@latest`, or Playwright 1.59+ for `npx --no-install playwright cli` |
 | `sync` / `create-bug` / `create-mr` exits with code 3 | The draft isn't approved, or the test cases changed after approval. Approve it through `/qe-testcases`, `/qe-bugs` or `/qe-pr` |

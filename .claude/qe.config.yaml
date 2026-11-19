@@ -94,6 +94,21 @@ robot:
   run_args: ["--variable", "ENV:${env}", "--loglevel", "DEBUG:INFO"]
   rerun_failed: true                     # re-run failures once to detect flakiness
 
+# -----------------------------------------------------------------------------
+# Exploratory testing (/qe-explore, exploratory-tester agent, explore_login.py)
+# -----------------------------------------------------------------------------
+exploratory:
+  budget_actions: 150                    # max browser actions per session before the agent must stop
+  allowed_envs: [qa, uat]                # never add production
+  default_roles: []                      # e.g. [LOAN_OFFICER, UNDERWRITER]; empty = the roles the story names
+  login:                                 # data-testid selectors of the login form (see testid_index.py)
+    path: /login                         # TODO
+    username_selector: TODO              # e.g. css=[data-testid="login-username"]
+    password_selector: TODO              # e.g. css=[data-testid="login-password"]
+    submit_selector: TODO                # e.g. css=[data-testid="login-submit"]
+    success_selector: null               # optional element shown after login; null = "URL left the login path"
+    timeout_ms: 15000
+
 environments:
   qa:
     ui_base_url: https://qa.loan-portal.example.com      # TODO

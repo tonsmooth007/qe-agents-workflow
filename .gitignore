@@ -13,3 +13,5 @@ report.html
 browser/
 playwright-log.txt
 .idea/
+# Playwright CLI output (may contain credentials)
+.playwright-cli/
