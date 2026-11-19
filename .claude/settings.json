@@ -2,6 +2,8 @@
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "permissions": {
     "allow": [
+      "Bash(.claude/scripts/qe-doctor.sh:*)",
+      "Bash(bash .claude/scripts/qe-doctor.sh:*)",
       "Bash(python3 .claude/scripts/story_state.py:*)",
       "Bash(python3 .claude/scripts/trace_score.py:*)",
       "Bash(python3 .claude/scripts/testid_index.py:*)",
@@ -13,6 +15,7 @@
       "Bash(python3 .claude/scripts/jira_cli.py issue-id:*)",
       "Bash(python3 .claude/scripts/zephyr_cli.py list:*)",
       "Bash(python3 .claude/scripts/zephyr_cli.py get:*)",
+      "Bash(python3 .claude/scripts/zephyr_cli.py approve:*)",
       "Bash(python3 .claude/scripts/zephyr_cli.py link-bug:*)",
       "Bash(python3 .claude/scripts/zephyr_cli.py sync-results:*)",
       "Bash(python3 .claude/scripts/gitlab_cli.py mr-status:*)",

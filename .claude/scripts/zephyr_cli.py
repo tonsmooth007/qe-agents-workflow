@@ -6,7 +6,10 @@ Read-only:
   zephyr_cli.py get TESTKEY                      # one test case (+ steps)
 
 Write:
+  zephyr_cli.py approve KEY --by NAME [--file PATH]
+      Records the human's approval of the current design (with a fingerprint of the test cases). QE Manager only.
   zephyr_cli.py sync KEY [--file PATH] [--dry-run]
+      REQUIRES approval: refuses (exit 3) if not approved, or if the test cases changed after approval.
       Creates every test case in .stories/KEY/03-test-cases.json that has no zephyr_key,
       adds its steps, links it to the story and writes the new key back to the file.
       Idempotent: a test case already linked to the story with the same name is adopted.
@@ -22,6 +25,9 @@ Write:
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 from common import Http, config, die, env, out, read_json, repo_root, story_dir, validate_key, write_json
@@ -63,15 +69,60 @@ def get_tc(tkey: str) -> dict:
 
 
 # --------------------------------------------------------------------------- write
+# --------------------------------------------------------------------------- human approval
+# Fields that change after approval without changing the design: Zephyr keys written back by sync,
+# and automation status written by robot-automation.
+_NON_DESIGN_FIELDS = {"zephyr_key", "automation"}
+
+
+def design_hash(doc: dict) -> str:
+    """Fingerprint of the test case design (what the human approved)."""
+    design = [{k: v for k, v in tc.items() if k not in _NON_DESIGN_FIELDS} for tc in doc.get("test_cases") or []]
+    raw = json.dumps({"story": doc.get("story"), "test_cases": design}, sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+
+
+def _tc_path(key: str, file: str | None) -> Path:
+    path = Path(file) if file else story_dir(key) / "03-test-cases.json"
+    return path if path.is_absolute() else repo_root() / path
+
+
+def approve(key: str, by: str, file: str | None) -> dict:
+    """Record the human's approval of the current design. Only the QE Manager runs this,
+    and only after the user explicitly approved the test cases in this session."""
+    path = _tc_path(key, file)
+    doc = read_json(path)
+    if not doc.get("test_cases"):
+        die(f"No test_cases in {path}")
+    if not by or by.strip().lower() in ("claude", "agent", "qe-manager", "assistant"):
+        die("--by must name the human who approved the test cases.")
+    doc["approval"] = {"status": "approved", "approved_by": by.strip(),
+                       "approved_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                       "content_hash": design_hash(doc),
+                       "test_case_count": len(doc["test_cases"])}
+    write_json(path, doc)
+    return {"ok": True, **doc["approval"]}
+
+
+def check_approval(doc: dict) -> None:
+    ap = doc.get("approval") or {}
+    if ap.get("status") != "approved" or not ap.get("approved_by"):
+        die("Test cases are not approved. A human must review and approve them first "
+            "(QE Manager runs: zephyr_cli.py approve <KEY> --by <name>).", code=3)
+    if ap.get("content_hash") != design_hash(doc):
+        die("Test cases changed after they were approved. Review and approve them again before creating "
+            "them in Zephyr.", code=3, approved_hash=ap.get("content_hash"), current_hash=design_hash(doc))
+
+
 def sync(key: str, file: str | None, dry_run: bool) -> dict:
     cfg = config()["zephyr"]
-    path = Path(file) if file else story_dir(key) / "03-test-cases.json"
-    if not path.is_absolute():
-        path = repo_root() / path
+    path = _tc_path(key, file)
     doc = read_json(path)
     tcs = doc.get("test_cases") or []
     if not tcs:
         die(f"No test_cases in {path}")
+    if not dry_run:  # --dry-run is allowed before approval so the payload can be previewed
+        check_approval(doc)
 
     z = client(dry_run)
     existing = {} if dry_run else {t["name"].strip().lower(): t["key"] for t in list_for_issue(key)}
@@ -285,6 +336,8 @@ def main() -> None:
     sub = ap.add_subparsers(dest="cmd", required=True)
     ls = sub.add_parser("list"); ls.add_argument("--issue", required=True)
     sub.add_parser("get").add_argument("testkey")
+    apv = sub.add_parser("approve"); apv.add_argument("key"); apv.add_argument("--by", required=True)
+    apv.add_argument("--file")
     sy = sub.add_parser("sync"); sy.add_argument("key"); sy.add_argument("--file"); sy.add_argument("--dry-run", action="store_true")
     cc = sub.add_parser("create-cycle"); cc.add_argument("key"); cc.add_argument("--name", required=True)
     cc.add_argument("--dry-run", action="store_true")
@@ -296,7 +349,9 @@ def main() -> None:
     lb.add_argument("--zephyr-keys", nargs="*"); lb.add_argument("--dry-run", action="store_true")
     a = ap.parse_args()
 
-    if a.cmd == "sync-results":
+    if a.cmd == "approve":
+        out(approve(validate_key(a.key), a.by, a.file))
+    elif a.cmd == "sync-results":
         out(sync_results(validate_key(a.key), a.env, a.cycle, a.dry_run))
     elif a.cmd == "link-bug":
         out(link_bug(validate_key(a.key), validate_key(a.bug), a.zephyr_keys, a.dry_run))

@@ -8,7 +8,7 @@ automated tests, synced results, bugs and a merge request:
  1 story         jira-user-story           Jira → .stories/LOAN-123/01-story.md (ACs, attachments, api/ui/both)
  2 traceability  requirement-traceability  static analysis of React / Go / Spring Boot / MySQL against the ACs → score
                  ── GATE: score ≥ 75% (.claude/scripts/trace_score.py): stop / override with a reason / re-scan
- 3 test_cases    zephyr-test-case          designs test cases → Zephyr Scale (linked to the story)
+ 3 test_cases    zephyr-test-case          designs test cases (draft) → HUMAN REVIEWS & APPROVES → Zephyr Scale
  4 automation    robot-automation          Robot (Browser + RequestsLibrary); data-testid locators only
  5 triage        triage                    run → rerun failures → classify → SYNC RESULTS TO ZEPHYR test cycle;
                                            test defects loop back to 4 (max 2), and every re-run is synced again
@@ -27,7 +27,7 @@ at any point.
 | QE Manager | `.claude/skills/qe-manager/SKILL.md` | your session model (Sonnet is enough) | — | Orchestrator: delegates, enforces gates, asks for approvals |
 | Jira User Story Agent | `.claude/agents/jira-user-story.md` | sonnet | blue | Story, ACs, attachments (mockups/PDFs), test type |
 | Requirement Traceability Agent | `.claude/agents/requirement-traceability.md` | opus | purple | Code-vs-AC evidence matrix, 75% gate |
-| Zephyr Test Case Agent | `.claude/agents/zephyr-test-case.md` | sonnet | cyan | Test design, creates and links Zephyr test cases |
+| Zephyr Test Case Agent | `.claude/agents/zephyr-test-case.md` | sonnet | cyan | Test case design as a draft for your review (no Zephyr writes) |
 | Robot Framework Automation Agent | `.claude/agents/robot-automation.md` | sonnet | green | Robot suites, data-testid locators, test-defect fixes |
 | Triage Agent | `.claude/agents/triage.md` | opus | orange | Runs tests, classifies failures, syncs results to Zephyr |
 | Bug Agent | `.claude/agents/bug.md` | haiku | red | Bug drafts with duplicate check (no filing) |
@@ -56,13 +56,23 @@ of 15 lines or fewer, which keeps the main session small.
    - `test_repo`: your suite and resource folder layout. `environments`: the UI and API base URLs per environment.
 5. `cp .claude/settings.local.json.example .claude/settings.local.json` and list the same application repo
    paths under `additionalDirectories`, so Claude Code is allowed to read them.
-6. Smoke test:
+6. Run the doctor until it reports no failures:
+   ```bash
+   .claude/scripts/qe-doctor.sh            # tools, packages, harness files, git, config, app repos, secrets
+   .claude/scripts/qe-doctor.sh --online   # + Jira / Zephyr / GitLab auth, issue types, statuses, environments, app URLs
+   ```
+   The results print as one table (Section | Status | Check | Fix), with PASS/WARN/FAIL/INFO in color and a
+   summary line. Use `--no-color` for logs. Activate your Robot virtualenv first, or point at it with
+   `QE_PYTHON=/path/to/venv/bin/python`. Exit code 1 means
+   at least one failure, so you can use it in CI too. Inside Claude Code, `/qe-doctor [--online]` runs it and
+   summarises the fixes.
+7. Smoke test:
    ```bash
    python3 .claude/scripts/jira_cli.py get-story LOAN-123 | head -40      # check the ACs are extracted
    python3 .claude/scripts/zephyr_cli.py list --issue LOAN-123
    python3 .claude/scripts/testid_index.py --filter loan | head -40
    ```
-7. In Claude Code, `/agents` should list the 7 agents, and typing `/qe-` should autocomplete `/qe-manager`
+8. In Claude Code, `/agents` should list the 7 agents, and typing `/qe-` should autocomplete `/qe-manager`
    and the per-phase commands. Restart Claude Code if they don't appear.
 
 ## Daily use: one story per context window
@@ -84,10 +94,11 @@ two of them.
 
 | # | Command | Phase / agent | Notes |
 |---|---|---|---|
+| – | `/qe-doctor [--online]` | — | Checks the harness setup and dependencies |
 | – | `/qe-status LOAN-123` | — | Progress and the next command to run |
 | 1 | `/qe-story LOAN-123` | jira-user-story | |
 | 2 | `/qe-trace LOAN-123 [--branch feat/x]` | requirement-traceability | 75% gate: stop / override / re-scan |
-| 3 | `/qe-testcases LOAN-123` | zephyr-test-case | Needs the gate passed or overridden |
+| 3 | `/qe-testcases LOAN-123` | zephyr-test-case | Needs the gate passed or overridden. You review and approve the test cases before they're created |
 | 4 | `/qe-automate LOAN-123 [--fix] [--allow-fallback]` | robot-automation | `--fix` fixes the test defects from triage |
 | 5 | `/qe-triage LOAN-123 [--env uat]` | triage | Always syncs the results to Zephyr Scale |
 | – | `/qe-sync-results LOAN-123 [--env uat]` | — | Retries a failed sync or re-pushes it, and re-links bugs |
@@ -103,7 +114,7 @@ two of them.
 ## Zephyr Scale integration
 | When | What is written | Command |
 |---|---|---|
-| Phase 3 | Test cases with steps, labels and AC coverage, linked to the story. Idempotent: existing linked cases with the same name are reused | `zephyr_cli.py sync` (asks permission) |
+| Phase 3, **after your approval** | Test cases with steps, labels and AC coverage, linked to the story. Idempotent: existing linked cases with the same name are reused | `zephyr_cli.py approve`, then `zephyr_cli.py sync` (asks permission) |
 | Phase 5, after **every** triage run | Results posted to the story's test cycle | `zephyr_cli.py sync-results` (automatic) |
 | Phase 6, after each bug is filed | Bug linked to the failed executions of its test cases | `zephyr_cli.py link-bug` (automatic) |
 
@@ -127,14 +138,20 @@ What `sync-results` posts:
 `unmapped_robot_tests` and aren't posted.
 
 ## Safety and human in the loop
-- The Bug and PR agents only write drafts (`06-bugs/*.md`, `07-mr.md`) with `approval: pending`.
-- The QE Manager shows you each draft. Only after you explicitly approve does it set `approval: approved` and
+- **Three approval points:** test cases (phase 3), bugs (phase 6) and the MR (phase 7). The agents for these only
+  write drafts (`03-test-cases.json`, `06-bugs/*.md`, `07-mr.md`) with approval pending.
+- **Test cases:** the QE Manager shows you a review (one row per case, AC coverage, `expected-fail` cases,
+  assumptions). You choose **Approve**, **Revise with feedback**, **Edit the file yourself** or **Don't create**.
+  On approval, `zephyr_cli.py approve` records your name and a fingerprint of the test cases. `sync` refuses
+  (exit 3) if they weren't approved, or if anything in the design changed after approval.
+- **Bugs and MR:** the QE Manager shows you each draft. Only after you explicitly approve does it set `approval: approved` and
   `approved_by`.
-- `jira_cli.py create-bug` and `gitlab_cli.py create-mr` **refuse** unapproved drafts with exit code 3.
+- `zephyr_cli.py sync`, `jira_cli.py create-bug` and `gitlab_cli.py create-mr` **refuse** unapproved drafts with exit code 3.
 - `.claude/settings.json` sets the permissions:
   - **ask:** `create-bug`, `add-comment`, `create-mr`, `git push`, `git commit`, and Zephyr test-case
     creation, cycle creation and execution posting run directly, so Claude Code prompts you.
-  - **allow:** read-only commands, plus the required results sync (`sync-results`, `link-bug`).
+  - **allow:** read-only commands, recording your test case approval (`approve`), and the required results sync
+    (`sync-results`, `link-bug`).
   - **deny:** force-push and reading `.claude/.env`.
 - Every command that writes externally supports `--dry-run`.
 
@@ -144,8 +161,9 @@ What `sync-results` posts:
 ├── .claude/
 │   ├── agents/*.md                7 subagents (each with its model set)
 │   ├── skills/qe-manager/         orchestrator skill (full flow, the only source of phase rules)
-│   ├── commands/qe-*.md           one command per phase + /qe-status + /qe-sync-results
-│   ├── scripts/                   Jira / Zephyr Scale / GitLab REST clients, gates, Robot runner/parser, testid index
+│   ├── commands/qe-*.md           one command per phase + /qe-status + /qe-sync-results + /qe-doctor
+│   ├── scripts/                   Jira / Zephyr Scale / GitLab REST clients, gates, Robot runner/parser, testid index,
+│   │                              qe-doctor.sh (dependency and config check)
 │   ├── templates/                 artifact templates the agents fill in
 │   ├── qe.config.yaml             non-secret configuration (relative paths resolve from the repo root)
 │   ├── .env.example               template for secrets → copy to .claude/.env (git-ignored, loaded by the scripts)
@@ -175,6 +193,8 @@ What `sync-results` posts:
     the drafts need a lot of editing; pull-request → sonnet if it stages the wrong files.
 
 ## Troubleshooting
+Start with `.claude/scripts/qe-doctor.sh --online`. It catches most of these.
+
 | Symptom | Likely cause / fix |
 |---|---|
 | `get-story` returns `acceptance_criteria_md: null` | Set `jira.acceptance_criteria_field`, or make sure the description has an "Acceptance Criteria" heading |
@@ -183,4 +203,4 @@ What `sync-results` posts:
 | A Robot test is missing in Zephyr | It has no Zephyr key tag (see `unmapped_robot_tests` in the sync output) |
 | The agents can't read the app repos | Add the paths to `.claude/settings.local.json` → `additionalDirectories` |
 | A permission prompt appears on a `--dry-run` | Expected: dry-runs match the same `ask` rule as the real write |
-| `create-bug` / `create-mr` exits with code 3 | The draft isn't approved. Approve it through `/qe-bugs` / `/qe-pr` |
+| `sync` / `create-bug` / `create-mr` exits with code 3 | The draft isn't approved, or the test cases changed after approval. Approve it through `/qe-testcases`, `/qe-bugs` or `/qe-pr` |

@@ -47,9 +47,29 @@ Gate: read `gates.traceability` from state (written by `trace_score.py`).
   - **Re-scan** — e.g. the user names a feature branch to look at instead. Re-run the phase with that
     instruction.
 
-### 3. test_cases → `zephyr-test-case`
-Tell it which ACs are `not_found`/`partial`, so their test cases get the `expected-fail` label. After it
-returns, store the keys: `story_state.py set <KEY> zephyr.test_cases '<json list of keys>'`.
+### 3. test_cases → `zephyr-test-case` — HUMAN IN THE LOOP (mandatory)
+Tell it which ACs are `not_found`/`partial`, so their test cases get the `expected-fail` label. The agent only
+writes a **draft** (`03-test-cases.json`, `approval.status: pending`) and never creates anything in Zephyr.
+1. Show the user a review of the draft, built from `03-test-cases.json`:
+   - a table with one row per case: local id | type | ACs | technique | priority | name;
+   - the AC coverage, flagging any AC with no case;
+   - the `expected-fail` cases, existing Zephyr cases that will be reused, and the agent's assumptions;
+   - on request, the full steps, test data and expected results of any case.
+2. AskUserQuestion: **Approve & create in Zephyr** / **Revise with feedback** / **I'll edit the file myself** /
+   **Don't create**.
+   - **Revise with feedback** → collect the feedback (cases to add, remove or change, data, priorities). Send it to
+     `zephyr-test-case` in revision mode, then go back to step 1.
+   - **I'll edit the file myself** → wait until the user says they're done, then go back to step 1. Re-read the
+     file; don't rely on the earlier review.
+   - **Don't create** → set the phase to `blocked` with the user's reason, and stop.
+3. Only after an explicit **Approve**:
+   `python3 .claude/scripts/zephyr_cli.py approve <KEY> --by "<the user's name>"`, then
+   `python3 .claude/scripts/zephyr_cli.py sync <KEY>` (Claude Code will also ask for permission).
+   `sync` refuses (exit 3) if the draft isn't approved, or if it changed after approval. In that case, review it
+   again from step 1.
+4. Store the keys: `story_state.py set <KEY> zephyr.test_cases '<json list of keys>'`.
+Adding test cases later (e.g. after a scope change) goes through the same review. Only the new cases are
+created, and existing keys are kept.
 
 ### 4. automation → `robot-automation`
 If it reports **locator gaps**, show them and ask: **Keep the affected tests blocked and continue

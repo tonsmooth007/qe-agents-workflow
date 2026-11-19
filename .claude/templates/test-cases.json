@@ -1,25 +1,61 @@
 {
   "story": "LOAN-123",
   "generated_at": "2026-01-01T00:00:00Z",
-  "coverage": {"AC-1": ["TC-01", "TC-02"], "AC-2": ["TC-03"]},
+  "approval": {
+    "status": "pending",
+    "approved_by": null,
+    "approved_at": null,
+    "content_hash": null,
+    "test_case_count": null
+  },
+  "review_notes": [],
+  "coverage": {
+    "AC-1": [
+      "TC-01",
+      "TC-02"
+    ],
+    "AC-2": [
+      "TC-03"
+    ]
+  },
   "test_cases": [
     {
       "local_id": "TC-01",
       "zephyr_key": null,
       "name": "LOAN-123 | UI | Loan amount accepts boundary minimum 1,000",
       "type": "ui",
-      "ac_ids": ["AC-1"],
+      "ac_ids": [
+        "AC-1"
+      ],
       "technique": "boundary",
       "priority": "High",
-      "labels": ["regression", "boundary"],
+      "labels": [
+        "regression",
+        "boundary"
+      ],
       "objective": "Verify the loan amount step accepts the minimum allowed amount.",
       "precondition": "Applicant logged in; application in Draft at step 'Loan amount'.",
-      "test_data": {"amount": 1000},
+      "test_data": {
+        "amount": 1000
+      },
       "steps": [
-        {"description": "Enter 1000 in Loan amount", "test_data": "amount=1000", "expected_result": "No validation error shown"},
-        {"description": "Click Next", "test_data": "", "expected_result": "User is on 'Loan term' step"}
+        {
+          "description": "Enter 1000 in Loan amount",
+          "test_data": "amount=1000",
+          "expected_result": "No validation error shown"
+        },
+        {
+          "description": "Click Next",
+          "test_data": "",
+          "expected_result": "User is on 'Loan term' step"
+        }
       ],
-      "automation": {"status": "pending", "robot_file": null, "robot_test": null, "notes": null}
+      "automation": {
+        "status": "pending",
+        "robot_file": null,
+        "robot_test": null,
+        "notes": null
+      }
     }
   ]
 }

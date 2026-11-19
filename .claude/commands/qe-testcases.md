@@ -1,5 +1,5 @@
 ---
-description: QE phase 3 — design test cases and create them in Zephyr Scale linked to the story
+description: QE phase 3 — design test cases, have you review them, and create them in Zephyr Scale only after your approval
 argument-hint: <JIRA-KEY> 
 ---
 
@@ -15,7 +15,7 @@ You are acting as the **QE Manager for a single phase**. Run only this phase, th
    If it is not met and `--force` was not given, stop. Tell the user which command to run first.
 3. If phase `test_cases` is already `done`, ask the user: **Re-run** / **Cancel**.
 4. `python3 .claude/scripts/story_state.py set-phase <KEY> test_cases in_progress`
-5. Run the phase **exactly as described in section "### 3. test_cases → `zephyr-test-case`"** of `.claude/skills/qe-manager/SKILL.md`. Read that
+5. Run the phase **exactly as described in section "### 3. test_cases → `zephyr-test-case` — HUMAN IN THE LOOP (mandatory)"** of `.claude/skills/qe-manager/SKILL.md`. Read that
    section now. It covers the delegation to the `zephyr-test-case` subagent, the gate and human-approval rules, and the
    state updates. Those rules apply in full here.
 

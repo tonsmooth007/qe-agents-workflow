@@ -20,7 +20,7 @@ read-only for every agent.**
 |---|---|---|---|
 | `story` | jira-user-story | sonnet | |
 | `traceability` | requirement-traceability | opus | Gate ≥ `traceability.threshold`% |
-| `test_cases` | zephyr-test-case | sonnet | |
+| `test_cases` | zephyr-test-case | sonnet | Human approval required |
 | `automation` | robot-automation | sonnet | |
 | `triage` | triage | opus | Ends with the Zephyr results sync |
 | `bugs` | bug | haiku | Human approval required |
@@ -35,7 +35,7 @@ read-only for every agent.**
 | `state.json` | `story_state.py` (QE Manager), `trace_score.py` (gate), `zephyr_cli.py sync-results` (`zephyr.test_cycles`, `zephyr.executions`, `zephyr.last_sync`) | everyone; it is the resume point |
 | `01-story.md`, `attachments/`, `raw/jira-story.json` | jira-user-story | all later phases |
 | `02-traceability.json/.md` | requirement-traceability (+ `trace_score.py` stamps the score) | test cases, automation, triage |
-| `03-test-cases.json` | zephyr-test-case (`zephyr_cli.py sync` writes the Zephyr keys back) | automation, triage, PR |
+| `03-test-cases.json` | zephyr-test-case (draft) → QE Manager (`zephyr_cli.py approve`, after human approval) → `zephyr_cli.py sync` (writes the Zephyr keys back) | automation, triage, PR |
 | `04-automation.md` | robot-automation | triage, PR |
 | `05-results.json`, `05-triage-report.md`, `results/run-N/` | `run_robot.py` + triage (then `zephyr_cli.py sync-results`) | bug, PR |
 | `06-bugs/bug-N.md` | bug (draft) → QE Manager (approval) → `jira_cli.py create-bug` → `zephyr_cli.py link-bug` | PR |
@@ -49,21 +49,24 @@ Templates for every artifact are in `.claude/templates/`. Agents must follow the
 |---|---|
 | `story_state.py` | init / status / set-phase / set / log for `state.json` |
 | `jira_cli.py` | get-story, download-attachments, search-bugs, issue-id, **create-bug** (approved drafts only), add-comment |
-| `zephyr_cli.py` | list, get, **sync** (create + link test cases), **sync-results** (required after every triage: one cycle per story and env, executions with triage notes, Blocked for locator gaps), **link-bug** (filed bug → failed executions), create-cycle and post-executions (low-level) |
+| `zephyr_cli.py` | list, get, **approve** (records the human's test case approval + fingerprint), **sync** (create + link test cases; approved drafts only), **sync-results** (required after every triage: one cycle per story and env, executions with triage notes, Blocked for locator gaps), **link-bug** (filed bug → failed executions), create-cycle and post-executions (low-level) |
 | `gitlab_cli.py` | mr-status, **create-mr** (approved drafts only) |
 | `trace_score.py` | deterministic traceability score + gate (exit 0 pass / 2 fail) |
 | `testid_index.py` | index of `data-testid`s in the frontend repo(s), with ready-made selectors |
 | `run_robot.py` | runs the story's tagged tests (+ rerun of failures, `--dryrun`) → `05-results.json` |
 | `robot_summary.py` | parses output.xml into JSON (failing keyword chain, logs, screenshots) |
+| `qe-doctor.sh` | (bash) checks tools, packages, harness files, git, config, app repos and secrets; `--online` also checks Jira, Zephyr, GitLab and the app URLs. Run it with `bash` (`/qe-doctor`) |
 | `adf.py` | (library) converts between Jira's rich-text format (ADF) and Markdown, used by `jira_cli.py` |
 
 Every command that writes externally supports `--dry-run`. Credentials come from `.claude/.env` and never appear in
 files, commits or output.
 
 ## Non-negotiable rules
-1. **Human in the loop:** bugs are filed and MRs created/pushed only after the user explicitly approves the
-   specific draft in this session. Only the QE Manager sets `approval: approved`, and the scripts refuse
-   drafts that are not approved.
+1. **Human in the loop:** test cases are created in Zephyr, bugs are filed, and MRs are created and pushed only
+   after the user explicitly approves the specific draft in this session. Only the QE Manager records an
+   approval (`zephyr_cli.py approve` for test cases, `approval: approved` front matter for bugs and the MR), and
+   the scripts refuse drafts that are not approved. Test cases also need re-approval if the design changes
+   after approval.
 2. **Locators:** UI locators come **only** from `data-testid` in the React source
    (`css=[data-testid="..."]`). A missing testid is a reported *locator gap*, not a reason to write XPath.
 3. **Traceability tags** on every Robot test: `<ZEPHYR-KEY>  <STORY-KEY>  api|ui`, one Robot test per
