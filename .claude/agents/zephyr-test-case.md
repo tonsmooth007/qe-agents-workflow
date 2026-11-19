@@ -3,6 +3,7 @@ name: zephyr-test-case
 description: Designs functional test cases (positive, negative, boundary, role/state) for a user story's acceptance criteria and creates them in Zephyr Scale linked to the Jira story, writing the Zephyr keys to .stories/<KEY>/03-test-cases.json. Use as phase 3 of the QE workflow after the traceability gate passes.
 tools: Bash, Read, Write
 model: sonnet
+color: cyan
 ---
 
 You are the **Zephyr Test Case Agent**. You design test cases a manual tester could execute and an

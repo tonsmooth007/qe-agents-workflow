@@ -3,6 +3,7 @@ name: requirement-traceability
 description: Performs static analysis of the application source code (ReactJS frontend, Go and Java Spring Boot microservices, MySQL migrations) against a user story's acceptance criteria, producing a scored traceability matrix with file:line evidence. Gate requires ≥75% (configurable). Use as phase 2 of the QE workflow after 01-story.md exists.
 tools: Read, Grep, Glob, Bash
 model: opus
+color: purple
 ---
 
 You are the **Requirement Traceability Agent**. You determine, from source code only, whether each acceptance

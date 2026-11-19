@@ -22,16 +22,16 @@ Everything is saved under `.stories/<KEY>/`, so each story can be worked in its 
 at any point.
 
 ## Components
-| Piece | Where | Model | Role |
-|---|---|---|---|
-| QE Manager | `.claude/skills/qe-manager/SKILL.md` | your session model (Sonnet is enough) | Orchestrator: delegates, enforces gates, asks for approvals |
-| Jira User Story Agent | `.claude/agents/jira-user-story.md` | sonnet | Story, ACs, attachments (mockups/PDFs), test type |
-| Requirement Traceability Agent | `.claude/agents/requirement-traceability.md` | opus | Code-vs-AC evidence matrix, 75% gate |
-| Zephyr Test Case Agent | `.claude/agents/zephyr-test-case.md` | sonnet | Test design, creates and links Zephyr test cases |
-| Robot Framework Automation Agent | `.claude/agents/robot-automation.md` | sonnet | Robot suites, data-testid locators, test-defect fixes |
-| Triage Agent | `.claude/agents/triage.md` | opus | Runs tests, classifies failures, syncs results to Zephyr |
-| Bug Agent | `.claude/agents/bug.md` | haiku | Bug drafts with duplicate check (no filing) |
-| Pull Request Agent | `.claude/agents/pull-request.md` | haiku | Diff review, commit, MR draft (no push) |
+| Piece | Where | Model | Color | Role |
+|---|---|---|---|---|
+| QE Manager | `.claude/skills/qe-manager/SKILL.md` | your session model (Sonnet is enough) | — | Orchestrator: delegates, enforces gates, asks for approvals |
+| Jira User Story Agent | `.claude/agents/jira-user-story.md` | sonnet | blue | Story, ACs, attachments (mockups/PDFs), test type |
+| Requirement Traceability Agent | `.claude/agents/requirement-traceability.md` | opus | purple | Code-vs-AC evidence matrix, 75% gate |
+| Zephyr Test Case Agent | `.claude/agents/zephyr-test-case.md` | sonnet | cyan | Test design, creates and links Zephyr test cases |
+| Robot Framework Automation Agent | `.claude/agents/robot-automation.md` | sonnet | green | Robot suites, data-testid locators, test-defect fixes |
+| Triage Agent | `.claude/agents/triage.md` | opus | orange | Runs tests, classifies failures, syncs results to Zephyr |
+| Bug Agent | `.claude/agents/bug.md` | haiku | red | Bug drafts with duplicate check (no filing) |
+| Pull Request Agent | `.claude/agents/pull-request.md` | haiku | pink | Diff review, commit, MR draft (no push) |
 
 **Why the QE Manager is a skill, not a subagent:** Claude Code subagents can't start other subagents, so the
 orchestrator has to run in the main conversation. Each worker runs in its own context and returns a summary
@@ -162,6 +162,8 @@ What `sync-results` posts:
 - **Zephyr statuses and environments:** `zephyr.status_map`, `zephyr.blocked_status`, `zephyr.environment_map`.
 - **Child-bug issue type:** in company-managed Jira projects, a "child" bug must be a sub-task issue type
   (e.g. `Sub-bug`). Otherwise use `relates`.
+- **Terminal color per agent:** the `color:` line in each agent's front matter (red, blue, green, yellow,
+  purple, orange, pink, cyan).
 - **Model per agent:** the `model:` line in each agent's front matter (`haiku`, `sonnet`, `opus` or `inherit`).
   - **opus** for requirement-traceability and triage. They need deep reasoning across several repos, and their
     output decides the gate and whether bugs get filed.
