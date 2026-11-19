@@ -123,8 +123,14 @@ if command -v "$PY" >/dev/null 2>&1; then
   else
     fail "Python $PYV is too old (need 3.9+)" "Install Python 3.9+ or set QE_PYTHON"
   fi
-  if [ -z "${VIRTUAL_ENV:-}" ] && [ -z "${QE_PYTHON:-}" ]; then
-    info "No virtualenv active. Checking the system python3; activate your Robot venv if you use one."
+  if [ -n "${VIRTUAL_ENV:-}" ]; then
+    pass "Virtualenv active: $(echo "$VIRTUAL_ENV" | sed "s#^$HOME#~#")"
+  elif [ -n "${CONDA_PREFIX:-}" ]; then
+    pass "Conda env active: $(echo "$CONDA_PREFIX" | sed "s#^$HOME#~#")"
+  elif [ -n "${QE_PYTHON:-}" ]; then
+    warn "No virtualenv active (checking QE_PYTHON instead)" "Claude Code uses PATH, not QE_PYTHON: activate the venv before starting claude"
+  else
+    warn "No virtualenv active, so the system python3 is being checked" "source .venv/bin/activate (your Robot venv), then start claude from that terminal"
   fi
 else
   fail "Python not found ($PY)" "Install Python 3.9+, or set QE_PYTHON=/path/to/python"

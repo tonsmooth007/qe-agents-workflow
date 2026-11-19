@@ -9,7 +9,9 @@ GitLab repo, cloned locally at the paths in `.claude/qe.config.yaml` → `applic
 read-only for every agent.**
 
 ## How to work a story
-- Start a **fresh Claude Code session for each story**.
+- Start a **fresh Claude Code session for each story**, launched **from the activated Robot Framework
+  virtualenv** (`source .venv/bin/activate && claude`). The scripts and `robot` come from PATH, so without the
+  venv they run on the system Python.
 - **Full flow:** `/qe-manager LOAN-123`. Resume after `/clear` or in a new window with the same command.
   `--status` shows progress, and `--from <phase>` re-runs from a phase.
 - **Step by step:** `/qe-story` → `/qe-trace` → `/qe-testcases` → `/qe-automate [--fix]` → `/qe-triage` →
@@ -60,6 +62,14 @@ Templates for every artifact are in `.claude/templates/`. Agents must follow the
 
 Every command that writes externally supports `--dry-run`. Credentials come from `.claude/.env` and never appear in
 files, commits or output.
+
+## Python environment
+- Run all harness scripts with `python3` from PATH. That's the activated venv the user started Claude Code from.
+- If `robot` isn't found, or `robot`, `Browser`, `RequestsLibrary`, `requests` or `yaml` fail to import, **stop**.
+  Tell the user to exit Claude Code, activate the Robot venv (`source .venv/bin/activate`), and start `claude`
+  again. They can check with `.claude/scripts/qe-doctor.sh`.
+- Never `pip install` into the system Python. Never try to activate a venv from inside the session, since that
+  doesn't carry over to later commands. Never hard-code an interpreter path as a workaround.
 
 ## Non-negotiable rules
 1. **Human in the loop:** test cases are created in Zephyr, bugs are filed, and MRs are created and pushed only

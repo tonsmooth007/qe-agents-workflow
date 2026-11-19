@@ -38,13 +38,27 @@ orchestrator has to run in the main conversation. Each worker runs in its own co
 of 15 lines or fewer, which keeps the main session small.
 
 ## Install into the Robot Framework test repo
+
+> **Always activate the Robot Framework virtualenv before you start Claude Code.**
+> The harness has no Python setting of its own. The agents run `python3 .claude/scripts/...` and `robot` from
+> your PATH, and Claude Code passes on the environment of the terminal you start it from. If the venv isn't
+> active, the agents use the system Python, where Robot Framework, Browser Library and RequestsLibrary are
+> missing or the wrong versions.
+>
+> ```bash
+> cd <robot-test-repo>
+> source .venv/bin/activate     # your venv path; on Windows: .venv\Scripts\activate
+> claude
+> ```
+> Activating it inside a running Claude Code session doesn't help. Exit, activate, and start `claude` again.
+
 1. Copy into the **root of the test repo**, merging with what is already there:
    - the whole `.claude/` folder (agents, skills, commands, scripts, templates, `qe.config.yaml`, `.env.example`, settings);
    - `CLAUDE.md` and `requirements-qe.txt`.
    Append the contents of `.gitignore` to the repo's `.gitignore`. If the repo already has a `CLAUDE.md`, merge
    the two and keep the "Robot Framework conventions" section accurate, because the automation agent follows it.
-2. `pip install -r requirements-qe.txt`. Use the same virtualenv you run Robot from, and run `rfbrowser init`
-   if you haven't already.
+2. Activate the virtualenv you run Robot from, then `pip install -r requirements-qe.txt`, and run
+   `rfbrowser init` if you haven't already.
 3. `cp .claude/.env.example .claude/.env` and fill in the Jira, Zephyr and GitLab tokens and the test user credentials.
 4. Edit `.claude/qe.config.yaml`:
    - `jira`: project key, the AC custom field id (or null), and the bug issue types. A child bug needs a
@@ -62,8 +76,8 @@ of 15 lines or fewer, which keeps the main session small.
    .claude/scripts/qe-doctor.sh --online   # + Jira / Zephyr / GitLab auth, issue types, statuses, environments, app URLs
    ```
    The results print as one table (Section | Status | Check | Fix), with PASS/WARN/FAIL/INFO in color and a
-   summary line. Use `--no-color` for logs. Activate your Robot virtualenv first, or point at it with
-   `QE_PYTHON=/path/to/venv/bin/python`. Exit code 1 means
+   summary line. Use `--no-color` for logs. Run it with the virtualenv active (the Tools row shows which Python
+   it found), or point at it with `QE_PYTHON=/path/to/venv/bin/python`. Exit code 1 means
    at least one failure, so you can use it in CI too. Inside Claude Code, `/qe-doctor [--online]` runs it and
    summarises the fixes.
 7. Smoke test:
@@ -72,14 +86,19 @@ of 15 lines or fewer, which keeps the main session small.
    python3 .claude/scripts/zephyr_cli.py list --issue LOAN-123
    python3 .claude/scripts/testid_index.py --filter loan | head -40
    ```
-8. In Claude Code, `/agents` should list the 7 agents, and typing `/qe-` should autocomplete `/qe-manager`
+8. Start Claude Code **from the activated virtualenv** (see the note above). In it, `/agents` should list the 7 agents, and typing `/qe-` should autocomplete `/qe-manager`
    and the per-phase commands. Restart Claude Code if they don't appear.
 
 ## Daily use: one story per context window
 
+Every session starts the same way. Activate the venv first, then start Claude Code:
+```bash
+cd <robot-test-repo> && source .venv/bin/activate && claude
+```
+
 ### Full flow
 ```
-claude                                   # fresh session from the test repo root
+claude                                   # fresh session from the test repo root, with the venv ACTIVE
 /qe-manager LOAN-123                     # runs every phase; asks you at the gates and before filing or pushing
 /clear                                   # any time; state is on disk
 /qe-manager LOAN-123                     # resumes at the next unfinished phase
@@ -198,6 +217,7 @@ Start with `.claude/scripts/qe-doctor.sh --online`. It catches most of these.
 | Symptom | Likely cause / fix |
 |---|---|
 | `get-story` returns `acceptance_criteria_md: null` | Set `jira.acceptance_criteria_field`, or make sure the description has an "Acceptance Criteria" heading |
+| `robot: command not found`, or `No module named robot / Browser / RequestsLibrary` | Claude Code was started without the venv active. Exit, `source .venv/bin/activate`, start `claude` again |
 | `run_robot.py` fails with rc 252 | No tests are tagged with the story key, or a suite path or syntax is wrong. Run `/qe-automate --fix` or check the tags |
 | Zephyr sync fails | Check the token and `zephyr.project_key`. Names in `environment_map` and `status_map` must exist in Zephyr. Retry with `/qe-sync-results <KEY>` |
 | A Robot test is missing in Zephyr | It has no Zephyr key tag (see `unmapped_robot_tests` in the sync output) |
