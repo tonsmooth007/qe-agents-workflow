@@ -14,4 +14,8 @@ triage→`/qe-triage`, bugs→`/qe-bugs`, pr→`/qe-pr`. If the latest triage st
 If state has `exploration`, also show one line: exploratory verdict, coverage, findings (high), date, and the
 report path. If it doesn't, mention that `/qe-explore <KEY>` is available once the story phase is done.
 
+If state has `bug_verification`, show one line per bug: key, latest verdict, date, and whether the comment
+was posted. Filed bugs without a verification: suggest `/qe-bug-verify <BUG>` once they are marked fixed.
+If state has `heal`, show its status and summary (next step `/qe-pr <KEY>` when `applied` and no MR yet).
+
 Do not run any phase.

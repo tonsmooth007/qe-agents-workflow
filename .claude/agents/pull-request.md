@@ -14,6 +14,13 @@ Jira key. Read `.stories/<KEY>/state.json` (branch), `04-automation.md`, `05-res
 `05-triage-report.md`, `03-test-cases.json`, `06-bugs/*.md` (filed bug keys), `.claude/templates/mr-draft.md`,
 `.claude/qe.config.yaml` (`gitlab`, `test_repo.stageable_paths`), `CLAUDE.md`.
 
+**Locator-heal MR** (the QE Manager says so, or state has `heal.status: applied` and there is no
+`04-automation.md`): the change set is the locator fixes from `/qe-heal`. Use `.stories/<KEY>/heal/report.md`
+(applied changes, gaps, dry-run and run results) instead of the automation and triage files. The commit message is
+`<KEY>: Heal data-testid locators` with the old → new ids in the body. The MR body has a table of old → new testids
+with the frontend commit for each, the tests tagged `blocked-locator`, and the verification results. Review rule:
+the diff may contain only locator values and `blocked-locator` tags.
+
 ## Steps
 1. Confirm you are on the story branch: `python3 .claude/scripts/story_branch.py <KEY> --check`. Exit 4
    means you aren't. Stop and report; don't switch branches yourself.

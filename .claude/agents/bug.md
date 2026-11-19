@@ -26,6 +26,8 @@ Jira key. Read `.stories/<KEY>/05-triage-report.md`, `05-results.json` (entries 
      actual (exact message/HTTP status/body excerpt), environment, evidence, suspected code location,
      severity with rationale (Blocker/Critical/Major/Minor/Trivial — money/compliance/data-integrity issues
      are at least Critical), `attachments` = screenshot paths from `05-results.json` (repo-relative).
+     `found_in_run` = the run folder name from `05-results.json` `run_dir` (e.g. `run-3`); `/qe-bug-verify`
+     compares the retest against the failure in that run.
    - Keep `approval: pending`, `approved_by: null`, `jira_key: null`. Fill `duplicates_checked`.
 4. Validate payloads: `python3 .claude/scripts/jira_cli.py create-bug --draft <file> --dry-run` for each draft.
 

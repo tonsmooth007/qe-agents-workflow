@@ -109,6 +109,24 @@ exploratory:
     success_selector: null               # optional element shown after login; null = "URL left the login path"
     timeout_ms: 15000
 
+# -----------------------------------------------------------------------------
+# Maintenance flows: /qe-bug-verify, /qe-impact, /qe-heal
+# -----------------------------------------------------------------------------
+bug_verify:
+  # Jira statuses that mean "fixed, ready to retest". Any other status asks you before running.
+  ready_statuses: ["Ready for QA", "Ready for Test", "Resolved"]
+  # Also run the rest of the story's tests as a small regression check (override with --regression/--no-regression)
+  story_regression: false
+
+impact:
+  line_context: 3                        # lines around a changed hunk that still count as a "line" hit
+  # Changed files matching these globs are never reported as unmapped (docs, CI, generated code)
+  ignore_globs: ["**/*.md", "**/.gitlab-ci.yml", "**/generated/**", "**/__snapshots__/**"]
+
+heal:
+  # Minimum similarity (0-1) for a renamed_in_commit candidate to be proposed as "high" confidence
+  high_confidence_score: 0.6
+
 environments:
   qa:
     ui_base_url: https://qa.loan-portal.example.com      # TODO

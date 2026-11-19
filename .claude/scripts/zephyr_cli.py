@@ -16,9 +16,12 @@ Write:
   zephyr_cli.py create-cycle KEY --name NAME [--dry-run]
   zephyr_cli.py post-executions KEY --cycle CYCLEKEY [--results PATH] [--environment NAME] [--dry-run]
       Low-level: posts Robot results (.stories/KEY/05-results.json) as executions in the cycle.
-  zephyr_cli.py sync-results KEY [--env ENV] [--cycle CYCLEKEY] [--dry-run]
+  zephyr_cli.py sync-results KEY [--env ENV] [--cycle CYCLEKEY] [--results FILE] [--label TEXT] [--dry-run]
       MANDATORY after every triage. Reuses or creates the story's cycle for the environment, posts every
       result with its triage notes, posts locator-blocked cases as Blocked, and saves the execution ids in state.
+      --results FILE syncs a subset run instead of 05-results.json (bug verification, impact or heal runs, written
+      by run_robot.py --out). Blocked cases are not re-posted, and state records it under zephyr.extra_syncs
+      instead of zephyr.last_sync. --label is prepended to every execution comment (e.g. "Retest for LOAN-456").
   zephyr_cli.py link-bug KEY --bug BUGKEY [--zephyr-keys K ...] [--dry-run]
       Links a filed bug to the latest execution of its Zephyr test cases.
 """
@@ -218,8 +221,9 @@ def post_executions(key: str, cycle: str, results: str | None, environment: str 
     return {"ok": True, "dry_run": dry_run, "cycle": cycle, "posted": posted, "unmapped_tests": unmapped}
 
 
-def _comment(t: dict) -> str:
-    parts = [f"<b>Robot test:</b> {t.get('longname', t['name'])}"]
+def _comment(t: dict, label: str | None = None) -> str:
+    parts = [f"<b>{label}</b>"] if label else []
+    parts.append(f"<b>Robot test:</b> {t.get('longname', t['name'])}")
     if t.get("triage_category"):
         parts.append(f"<b>Triage:</b> {t['triage_category']} ({t.get('triage_confidence', 'n/a')}) — "
                      f"{t.get('triage_summary', '')}")
@@ -231,7 +235,8 @@ def _comment(t: dict) -> str:
     return "<br>".join(parts)[:4000]
 
 
-def sync_results(key: str, env_name: str | None, cycle: str | None, dry_run: bool) -> dict:
+def sync_results(key: str, env_name: str | None, cycle: str | None, dry_run: bool,
+                 results_file: str | None = None, label: str | None = None) -> dict:
     """Push the latest run (05-results.json + triage fields) to Zephyr Scale.
 
     - Reuses one test cycle per story and environment (state: zephyr.test_cycles[env]), creating it on first use.
@@ -242,7 +247,16 @@ def sync_results(key: str, env_name: str | None, cycle: str | None, dry_run: boo
     """
     cfg = config()["zephyr"]
     sd = story_dir(key)
-    results = read_json(sd / "05-results.json")
+    main_results = sd / "05-results.json"
+    res_path = main_results
+    if results_file:
+        res_path = Path(results_file)
+        if not res_path.is_absolute():
+            res_path = (repo_root() / res_path) if (repo_root() / res_path).is_file() else sd / res_path
+    if not res_path.is_file():
+        die(f"Results file not found: {res_path}")
+    is_main = res_path.resolve() == main_results.resolve()
+    results = read_json(res_path)
     env_name = env_name or results.get("environment") or config().get("robot", {}).get("default_env", "qa")
     state_p = sd / "state.json"
     st = read_json(state_p) if state_p.is_file() else {}
@@ -275,11 +289,11 @@ def sync_results(key: str, env_name: str | None, cycle: str | None, dry_run: boo
             continue
         for tk in keys:
             executed.add(tk)
-            post(tk, smap.get(t["status"], t["status"]), _comment(t), t.get("elapsed_ms") or 0)
+            post(tk, smap.get(t["status"], t["status"]), _comment(t, label), t.get("elapsed_ms") or 0)
 
     blocked = []
     tc_path = sd / "03-test-cases.json"
-    if tc_path.is_file():
+    if is_main and tc_path.is_file():  # subset runs don't re-post the story's blocked cases
         for tc in read_json(tc_path).get("test_cases", []):
             tk, auto = tc.get("zephyr_key"), (tc.get("automation") or {})
             if tk and tk not in executed and str(auto.get("status", "")).startswith("blocked"):
@@ -294,11 +308,17 @@ def sync_results(key: str, env_name: str | None, cycle: str | None, dry_run: boo
         for p in posted:
             execs[p["zephyr_key"]] = {"execution_id": p["execution_id"], "status": p["status"],
                                       "cycle": cycle, "env": env_name, "run_dir": results.get("run_dir")}
-        zst["last_sync"] = {"at": datetime.now(timezone.utc).isoformat(timespec="seconds"), "cycle": cycle,
-                            "env": env_name, "run_dir": results.get("run_dir"), "posted": len(posted)}
+        sync_info = {"at": datetime.now(timezone.utc).isoformat(timespec="seconds"), "cycle": cycle,
+                     "env": env_name, "run_dir": results.get("run_dir"), "posted": len(posted)}
+        if is_main:
+            zst["last_sync"] = sync_info
+        else:
+            sync_info.update(results=str(res_path.relative_to(repo_root())), label=label)
+            zst.setdefault("extra_syncs", []).append(sync_info)
         write_json(state_p, st)
 
     return {"ok": True, "dry_run": dry_run, "cycle": cycle, "cycle_created": created_cycle, "env": env_name,
+            "results_file": str(res_path.relative_to(repo_root())), "label": label,
             "zephyr_environment": zenv, "posted": len(posted),
             "by_status": {s: sum(p["status"] == s for p in posted) for s in {p["status"] for p in posted}},
             "blocked_posted": blocked, "unmapped_robot_tests": unmapped}
@@ -344,6 +364,8 @@ def main() -> None:
     pe = sub.add_parser("post-executions"); pe.add_argument("key"); pe.add_argument("--cycle", required=True)
     pe.add_argument("--results"); pe.add_argument("--environment"); pe.add_argument("--dry-run", action="store_true")
     sr = sub.add_parser("sync-results"); sr.add_argument("key"); sr.add_argument("--env"); sr.add_argument("--cycle")
+    sr.add_argument("--results", help="Subset results file (default .stories/KEY/05-results.json)")
+    sr.add_argument("--label", help="Prefix for every execution comment, e.g. 'Retest for LOAN-456'")
     sr.add_argument("--dry-run", action="store_true")
     lb = sub.add_parser("link-bug"); lb.add_argument("key"); lb.add_argument("--bug", required=True)
     lb.add_argument("--zephyr-keys", nargs="*"); lb.add_argument("--dry-run", action="store_true")
@@ -352,7 +374,7 @@ def main() -> None:
     if a.cmd == "approve":
         out(approve(validate_key(a.key), a.by, a.file))
     elif a.cmd == "sync-results":
-        out(sync_results(validate_key(a.key), a.env, a.cycle, a.dry_run))
+        out(sync_results(validate_key(a.key), a.env, a.cycle, a.dry_run, a.results, a.label))
     elif a.cmd == "link-bug":
         out(link_bug(validate_key(a.key), validate_key(a.bug), a.zephyr_keys, a.dry_run))
     elif a.cmd == "list":

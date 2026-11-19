@@ -4,6 +4,9 @@
 Usage:
   run_robot.py KEY [--env qa] [--paths tests/ui tests/api] [--include TAG ...] [--no-rerun]
   run_robot.py KEY --dryrun          # syntax/keyword check only (used by robot-automation agent)
+  run_robot.py KEY --include LOAN-T101 LOAN-T102 --run-prefix verify --out verify-LOAN-456.json
+                                     # subset run (bug verification, impact, heal): results/verify-N/ and a
+                                     # separate summary file, so the story's 05-results.json is left alone
 
 Selection defaults to tests tagged with the story key. Each run goes to
 .stories/KEY/results/run-N/. Robot's own exit code (= number of failed tests) is
@@ -15,21 +18,27 @@ every Robot run, so tests can use %{COMS_<ROLE>_USERNAME}. Variables already exp
 from __future__ import annotations
 
 import argparse
+import re
 import subprocess
 import sys
 
 from common import config, die, load_test_repo_env as test_repo_env, out, repo_root, story_dir, validate_key, write_json
 
 
-def next_run_dir(key: str, dryrun: bool):
+RUN_PREFIX_RE = re.compile(r"^[a-z][a-z0-9]{0,15}$")
+OUT_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,80}\.json$")
+
+
+def next_run_dir(key: str, dryrun: bool, prefix: str = "run"):
     base = story_dir(key) / "results"
     base.mkdir(parents=True, exist_ok=True)
     if dryrun:
         d = base / "dryrun"
         d.mkdir(exist_ok=True)
         return d
-    n = 1 + max([int(p.name.split("-")[1]) for p in base.glob("run-*") if p.name.split("-")[1].isdigit()] or [0])
-    d = base / f"run-{n}"
+    nums = [int(p.name.rsplit("-", 1)[1]) for p in base.glob(f"{prefix}-*") if p.name.rsplit("-", 1)[1].isdigit()]
+    n = 1 + max(nums or [0])
+    d = base / f"{prefix}-{n}"
     d.mkdir()
     return d
 
@@ -59,15 +68,23 @@ def main() -> None:
     ap.add_argument("--include", nargs="*", help="Tags to include (default: the story key)")
     ap.add_argument("--no-rerun", action="store_true")
     ap.add_argument("--dryrun", action="store_true")
+    ap.add_argument("--run-prefix", default="run",
+                    help="Run folder prefix under .stories/KEY/results/ (default run → run-N)")
+    ap.add_argument("--out", default="05-results.json",
+                    help="Summary file name in .stories/KEY/ (default 05-results.json, the story's main results)")
     a = ap.parse_args()
     key = validate_key(a.key)
+    if not RUN_PREFIX_RE.match(a.run_prefix):
+        die("--run-prefix must be lowercase letters/digits, e.g. verify, impact, heal.")
+    if not OUT_NAME_RE.match(a.out):
+        die("--out must be a plain .json file name (it is written inside .stories/KEY/).")
     cfg = config()
     env_name = a.env or cfg.get("robot", {}).get("default_env", "qa")
     tr = cfg.get("test_repo", {})
     paths = a.paths or [d for d in (tr.get("ui_suites_dir", "tests/ui"), tr.get("api_suites_dir", "tests/api"))
                         if (repo_root() / d).is_dir() and any((repo_root() / d).rglob("*.robot"))] or ["tests"]
     includes = a.include or [key]
-    outdir = next_run_dir(key, a.dryrun)
+    outdir = next_run_dir(key, a.dryrun, a.run_prefix)
 
     cmd = ["robot", "--outputdir", str(outdir)]
     for t in includes:
@@ -95,11 +112,13 @@ def main() -> None:
             summary = merge_rerun(summary, summarize(str(rerun_xml)))
 
     summary.update({"story": key, "environment": env_name, "run_dir": str(outdir.relative_to(repo_root())),
-                    "dryrun": a.dryrun, "robot_rc": rc, "rerun_rc": rerun_rc,
+                    "dryrun": a.dryrun, "robot_rc": rc, "rerun_rc": rerun_rc, "includes": includes,
                     "log_html": str((outdir / "log.html").relative_to(repo_root()))})
+    results_file = story_dir(key) / a.out
     if not a.dryrun:
-        write_json(story_dir(key) / "05-results.json", summary)
+        write_json(results_file, summary)
     brief = {k: summary[k] for k in ("story", "environment", "run_dir", "dryrun", "stats", "log_html")}
+    brief["results_file"] = None if a.dryrun else str(results_file.relative_to(repo_root()))
     brief["failed_tests"] = [{"name": t["name"], "message": t["message"][:300], "flaky": t.get("flaky", False)}
                              for t in summary["tests"] if t["status"] == "FAIL" or t.get("flaky")]
     out(brief)

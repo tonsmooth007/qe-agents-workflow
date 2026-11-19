@@ -20,6 +20,14 @@ automated tests, synced results, bugs and a merge request:
 /qe-explore LOAN-123   (standalone, any time after phase 1)
    exploration   exploratory-tester        charters from ACs + edge-case heuristics → explores the live UI with
                                            playwright-cli → .stories/LOAN-123/explore/report.md → HUMAN REVIEWS
+
+Maintenance flows (standalone)
+/qe-bug-verify LOAN-456  bug-verifier      bug marked fixed → re-run its tests → compare with the original failure
+                                           → sync retest to Zephyr + link to bug → comment draft → HUMAN APPROVES → Jira
+/qe-impact --range A..B  change-impact     app-repo diff → ACs (traceability evidence) + testids → Zephyr keys → Robot
+                                           tests → risk-ranked selection + coverage gaps → (--run) per-story runs, synced
+/qe-heal [LOAN-999]      locator-healer    testids missing from React → replacements from frontend git history →
+                                           HUMAN APPROVES MAPPING → fix locator values on qe/LOAN-999-locator-heal → /qe-pr
 ```
 
 You can run the whole flow with `/qe-manager`, or one phase at a time with the `/qe-*` commands.
@@ -39,6 +47,9 @@ at any point.
 | Bug Agent | `.claude/agents/bug.md` | haiku | red | Bug drafts with duplicate check (no filing) |
 | Pull Request Agent | `.claude/agents/pull-request.md` | haiku | pink | Diff review, commit, MR draft (no push) |
 | Exploratory Tester | `.claude/agents/exploratory-tester.md` | opus | yellow | Charter-based exploratory testing of the live UI with the `playwright-cli` skill; report for your review (no filing) |
+| Bug Verification Agent | `.claude/agents/bug-verifier.md` | sonnet | blue | Retests a fixed bug, verdict with evidence, Zephyr retest sync, comment draft (no posting) |
+| Change Impact Agent | `.claude/agents/change-impact.md` | sonnet | cyan | Maps app-repo diffs to the tests that must run, and to coverage gaps (read-only) |
+| Locator Healer | `.claude/agents/locator-healer.md` | sonnet | green | data-testid drift: proposes renames from frontend history, applies approved ones on a heal branch |
 
 **Why the QE Manager is a skill, not a subagent:** Claude Code subagents can't start other subagents, so the
 orchestrator has to run in the main conversation. Each worker runs in its own context and returns a summary
@@ -96,7 +107,7 @@ of 15 lines or fewer, which keeps the main session small.
    python3 .claude/scripts/zephyr_cli.py list --issue LOAN-123
    python3 .claude/scripts/testid_index.py --filter loan | head -40
    ```
-8. Start Claude Code **from the activated virtualenv** (see the note above). In it, `/agents` should list the 8 agents, and typing `/qe-` should autocomplete `/qe-manager`,
+8. Start Claude Code **from the activated virtualenv** (see the note above). In it, `/agents` should list the 11 agents, and typing `/qe-` should autocomplete `/qe-manager`,
    the per-phase commands and `/qe-explore`. Restart Claude Code if they don't appear.
 9. *(Optional, for `/qe-explore`)* Install the Playwright CLI: `npm install -g @playwright/cli@latest` (or have
    Playwright 1.59+ in the repo so `npx --no-install playwright cli` works). Then check the login without
@@ -181,6 +192,73 @@ the existing test cases instead of repeating them.
 drafted as bugs (`/qe-bugs` approval rules) or added as test cases (`/qe-testcases`). Exploration runs only
 against `exploratory.allowed_envs`, with synthetic data.
 
+## Maintenance flows
+
+### Retest a fixed bug: `/qe-bug-verify`
+```
+/qe-bug-verify LOAN-456 [--story LOAN-123] [--env qa] [--regression]
+```
+1. Reads the bug from Jira (`jira_cli.py get-issue`). If its status isn't in `bug_verify.ready_statuses`, it asks
+   before going on.
+2. Finds the story, the Zephyr keys and the Robot tests from the bug draft (`bug_verify.py find`). It also gets
+   the **original failure signature** (failing keyword and normalised message) from the run named in the
+   draft's `found_in_run`.
+3. Re-runs only those tests as a subset run (`results/verify-N/`, `verify-<BUG>.json`), so the story's
+   `05-results.json` is left alone. With `--regression` it also runs the rest of the story's tests.
+4. `bug_verify.py compare` proposes a verdict, and the agent confirms it from the log:
+
+   | Verdict | Meaning |
+   |---|---|
+   | `verified` | Every linked test passed on the first attempt |
+   | `still_failing` | Same failure as the original report |
+   | `new_failure` | Fails differently: a regression, test defect or environment problem |
+   | `flaky` | Passed only on the rerun, so inconclusive |
+   | `blocked` | The tests couldn't run |
+   | `not_deployed` | The fix isn't in the environment yet |
+5. Syncs the retest to the story's Zephyr cycle (label "Retest for LOAN-456") and links the new executions to
+   the bug.
+6. Shows you the comment, and posts it with `jira_cli.py post-comment` only after you approve. The bug's status
+   is never changed: closing or reopening it is the team's call.
+
+### Pick the regression tests for a change: `/qe-impact`
+```
+/qe-impact --range v1.4.0..v1.5.0
+/qe-impact --repo loan-portal-web=origin/main..origin/feature/x --repo credit-decision-service=origin/main..origin/feature/x --run
+```
+- **The diff:** `impact_map.py` reads the diff of each application repo with read-only git. The refs must
+  already exist locally, because the harness never fetches app repos.
+- **Matching:** the diff is matched against every story's `02-traceability.json` evidence:
+  - **high:** a changed hunk touches the evidence line;
+  - **medium:** the same file;
+  - endpoints, routes and migrations count as well.
+- **Locators:** `data-testid`s that were removed or changed in the frontend diff are matched against the
+  locators the tests use. A removed one means a broken test, so run `/qe-heal`.
+- **Tests:** ACs are mapped to Zephyr keys (`03-test-cases.json`), and Zephyr keys to Robot tests (tags).
+- **Coverage gaps:** the agent reviews changes no traceability covers. It finds tests that cover them anyway,
+  or reports them as gaps.
+- **Output:** `.stories/_impact/<id>/impact.md`.
+- **`--run`:** after you confirm, runs the selection per story (`results/impact-N/`) and syncs each run to that
+  story's Zephyr cycle. Failures go to `/qe-triage <STORY>`.
+
+### Repair locator drift: `/qe-heal`
+```
+/qe-heal                          # report only: which locators no longer exist in the React source
+/qe-heal LOAN-999 --scope LOAN-123  # repair under a maintenance ticket, limited to one story's tests
+```
+1. **Check:** `testid_drift.py` checks every `data-testid` used in `tests/` and `resources/` against the frontend
+   as it is checked out.
+2. **History:** for each missing id, the frontend git history (`git log -S`, `git show`) finds the commit that
+   removed it and the ids added in the same file.
+3. **Proposals:** the agent confirms each candidate by reading the component, and marks it `high` (same element,
+   renamed), `low`, or `none` (element gone).
+4. **Approval:** you approve the mapping. High-confidence fixes can be applied in one go; low-confidence ones
+   only one by one.
+5. **Apply:** the agent changes **only the testid inside the existing locator variables**, on
+   `qe/<KEY>-locator-heal`. Elements that are gone become `blocked-locator` gaps, with a suggested testid for
+   the FE team. They're never replaced with XPath or text locators.
+6. **Verify:** dry-run, then (optionally) the affected tests on an environment, synced to Zephyr.
+7. **MR:** `/qe-pr <KEY>` commits and opens a locator-heal MR after your approval.
+
 ## Test credentials (RBAC)
 The application uses role-based access control, so tests log in as different roles. There are two `.env` files,
 both git-ignored:
@@ -217,6 +295,7 @@ COMS_UNDERWRITER_PASSWORD=...
 | Phase 3, **after your approval** | Test cases with steps, labels and AC coverage, linked to the story. Idempotent: existing linked cases with the same name are reused | `zephyr_cli.py approve`, then `zephyr_cli.py sync` (asks permission) |
 | Phase 5, after **every** triage run | Results posted to the story's test cycle | `zephyr_cli.py sync-results` (automatic) |
 | Phase 6, after each bug is filed | Bug linked to the failed executions of its test cases | `zephyr_cli.py link-bug` (automatic) |
+| `/qe-bug-verify`, `/qe-impact --run`, `/qe-heal` runs | Subset-run executions in the story's cycle, comment prefixed with a label ("Retest for LOAN-456", "Impact <id>", "Locator heal <KEY>"); retests linked to the bug | `zephyr_cli.py sync-results --results <file> --label <text>`, `link-bug` |
 
 What `sync-results` posts:
 - **One test cycle per story and environment**, e.g. `LOAN-123 | QA | Automated regression`. It's created on
@@ -248,9 +327,10 @@ What `sync-results` posts:
   `approved_by`.
 - `zephyr_cli.py sync`, `jira_cli.py create-bug` and `gitlab_cli.py create-mr` **refuse** unapproved drafts with exit code 3.
 - `.claude/settings.json` sets the permissions:
-  - **ask:** `create-bug`, `add-comment`, `create-mr`, `git push`, `git commit`, and Zephyr test-case
+  - **ask:** `create-bug`, `add-comment`, `post-comment`, `create-mr`, `git push`, `git commit`, and Zephyr test-case
     creation, cycle creation and execution posting run directly, so Claude Code prompts you.
-  - **allow:** read-only commands, recording your test case approval (`approve`), the required results sync
+  - **allow:** read-only commands (including `get-issue`, `robot_catalog.py`, `bug_verify.py`, `impact_map.py`,
+    `testid_drift.py`), recording your test case approval (`approve`), the required results sync
     (`sync-results`, `link-bug`), and the exploratory browser commands (`playwright-cli`, `explore_login.py`).
   - **deny:** force-push and reading `.claude/.env`.
 - Every command that writes externally supports `--dry-run`.
@@ -263,10 +343,11 @@ What `sync-results` posts:
 ```
 <test repo root>/
 ├── .claude/
-│   ├── agents/*.md                8 subagents (each with its model set)
+│   ├── agents/*.md                11 subagents (each with its model set)
 │   ├── skills/qe-manager/         orchestrator skill (full flow, the only source of phase rules)
 │   ├── skills/playwright-cli/     browser automation skill used by the exploratory tester
 │   ├── commands/qe-*.md           one command per phase + /qe-status + /qe-sync-results + /qe-doctor + /qe-explore
+│   │                              + /qe-bug-verify + /qe-impact + /qe-heal
 │   ├── scripts/                   Jira / Zephyr Scale / GitLab REST clients, gates, Robot runner/parser, testid index,
 │   │                              explore_login.py (role login for exploratory sessions),
 │   │                              qe-doctor.sh (dependency and config check)
@@ -317,4 +398,9 @@ Start with `.claude/scripts/qe-doctor.sh --online`. It catches most of these.
 | `/qe-explore` stops: exit 4 | The environment isn't in `exploratory.allowed_envs` |
 | `explore_login.py` exit 5 / exit 2 | 5: the role's `COMS_<ROLE>_*` pair is missing in the root `.env`. 2: the login didn't leave the login page (check the account, or set `login.success_selector`) |
 | `playwright-cli not found` | `npm install -g @playwright/cli@latest`, or Playwright 1.59+ for `npx --no-install playwright cli` |
+| `/qe-bug-verify`: "No story workspace references LOAN-456" (exit 4) | The bug was filed outside this harness. Pass `--story <KEY>` and make sure its draft (or the call) lists the Zephyr keys |
+| `/qe-bug-verify` says `new_failure` for what looks like the same bug | The failure message changed a lot (e.g. a different validation text). The agent reviews it. If it's really the same defect, the verdict becomes `still_failing` |
+| `/qe-impact`: "ref '…' not found locally" | `git fetch` in that application repo yourself. The harness never fetches app repos |
+| `/qe-impact` selects nothing for a change you know matters | That story has no `02-traceability.json`, or its evidence points at other files. Run `/qe-trace` for it. The report also lists the change under coverage gaps |
+| `/qe-heal` marks a locator `unverifiable` | The frontend builds that id from a JS expression. The agent reads the component to confirm the prefix |
 | `sync` / `create-bug` / `create-mr` exits with code 3 | The draft isn't approved, or the test cases changed after approval. Approve it through `/qe-testcases`, `/qe-bugs` or `/qe-pr` |

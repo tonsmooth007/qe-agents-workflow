@@ -12,6 +12,8 @@ You are acting as the **QE Manager for a single phase**. Run only this phase, th
 ## Steps
 1. `python3 .claude/scripts/story_state.py init <KEY>` (idempotent). Show the user a one-line status for every phase.
 2. **Prerequisite:** phase `triage` is `done`, and phase `bugs` is `done` or `skipped`.
+   **Exception, locator heal:** if state has `heal.status: applied` (from `/qe-heal <KEY>`), the prerequisite is
+   met without the phases. Tell the agent it is a **locator-heal MR**.
    If it is not met and `--force` was not given, stop. Tell the user which command to run first.
 3. If phase `pr` is already `done`, ask the user: **Re-run** / **Cancel**.
 4. `python3 .claude/scripts/story_state.py set-phase <KEY> pr in_progress`

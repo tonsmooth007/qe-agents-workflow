@@ -212,27 +212,27 @@ fi
 # --------------------------------------------------------------------------- harness files
 section "Harness"
 missing=""
-for a in jira-user-story requirement-traceability zephyr-test-case robot-automation triage bug pull-request exploratory-tester; do
+for a in jira-user-story requirement-traceability zephyr-test-case robot-automation triage bug pull-request exploratory-tester bug-verifier change-impact locator-healer; do
   [ -f "$HARNESS/agents/$a.md" ] || missing="$missing $a"
 done
-[ -z "$missing" ] && pass "8 agents in .claude/agents/" || fail "Missing agents:$missing"
+[ -z "$missing" ] && pass "11 agents in .claude/agents/" || fail "Missing agents:$missing"
 
 [ -f "$HARNESS/skills/qe-manager/SKILL.md" ] && pass "QE Manager skill" || fail "Missing .claude/skills/qe-manager/SKILL.md"
 
 missing=""
-for c in qe-story qe-trace qe-testcases qe-automate qe-triage qe-sync-results qe-bugs qe-pr qe-status; do
+for c in qe-story qe-trace qe-testcases qe-automate qe-triage qe-sync-results qe-bugs qe-pr qe-status qe-explore qe-bug-verify qe-impact qe-heal; do
   [ -f "$HARNESS/commands/$c.md" ] || missing="$missing $c"
 done
 [ -z "$missing" ] && pass "Phase commands in .claude/commands/" || fail "Missing commands:$missing"
 
 missing=""
-for s in common.py adf.py story_state.py story_branch.py test_credentials.py jira_cli.py zephyr_cli.py gitlab_cli.py trace_score.py testid_index.py run_robot.py robot_summary.py; do
+for s in common.py adf.py story_state.py story_branch.py test_credentials.py jira_cli.py zephyr_cli.py gitlab_cli.py trace_score.py testid_index.py run_robot.py robot_summary.py robot_catalog.py bug_verify.py impact_map.py testid_drift.py; do
   [ -f "$HARNESS/scripts/$s" ] || missing="$missing $s"
 done
 [ -z "$missing" ] && pass "Helper scripts in .claude/scripts/" || fail "Missing scripts:$missing"
 
 missing=""
-for t in story.md traceability.json test-cases.json automation.md triage-report.md bug-draft.md mr-draft.md; do
+for t in story.md traceability.json test-cases.json automation.md triage-report.md bug-draft.md mr-draft.md bug-verify.md impact-report.md heal-report.md; do
   [ -f "$HARNESS/templates/$t" ] || missing="$missing $t"
 done
 [ -z "$missing" ] && pass "Templates in .claude/templates/" || fail "Missing templates:$missing"

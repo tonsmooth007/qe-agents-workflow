@@ -7,6 +7,7 @@ priority: High              # Jira priority name
 labels: [regression]
 zephyr_keys: [LOAN-T103]
 robot_test: "Loan Amount Rejects 50,001"
+found_in_run: run-1         # results/run-N the failure came from (used by /qe-bug-verify)
 attachments:                # repo-relative paths (screenshots, log excerpts)
   - .stories/LOAN-123/results/run-1/browser/screenshot/fail-1.png
 duplicates_checked: [LOAN-456]   # keys returned by search-bugs that were reviewed

@@ -6,10 +6,14 @@ Read-only:
   jira_cli.py download-attachments KEY         # -> .stories/KEY/attachments/
   jira_cli.py search-bugs KEY [--text "..."]   # open bugs linked to / mentioning the story (dedupe)
   jira_cli.py issue-id KEY                     # numeric id (needed by Zephyr links)
+  jira_cli.py get-issue KEY                    # any issue (e.g. a bug): status, resolution, fix versions, links
 
 Write (REQUIRES human approval — enforced by the approval field in the draft + permission prompt):
   jira_cli.py create-bug --draft .stories/KEY/06-bugs/bug-1.md [--dry-run]
   jira_cli.py add-comment KEY --body-file FILE [--dry-run]
+  jira_cli.py post-comment --draft .stories/KEY/08-verify/LOAN-456.md [--dry-run]
+      Posts an APPROVED comment draft (front matter: issue, approval: approved, approved_by) to its issue,
+      then records comment_id and approval: posted. Refuses (exit 3) unapproved drafts.
 """
 from __future__ import annotations
 
@@ -152,6 +156,27 @@ def search_bugs(key: str, text: str | None) -> dict:
     return {"jql": jql, "count": len(issues), "issues": issues}
 
 
+def get_issue(key: str) -> dict:
+    raw = client().get(f"issue/{key}", params={
+        "fields": "summary,status,resolution,issuetype,priority,fixVersions,labels,parent,issuelinks,"
+                  "updated,resolutiondate,assignee,components"})
+    f = raw["fields"]
+    status = f.get("status") or {}
+    return {
+        "key": raw["key"], "id": raw["id"], "url": f"{env('JIRA_BASE_URL')}/browse/{raw['key']}",
+        "summary": f.get("summary"), "issue_type": (f.get("issuetype") or {}).get("name"),
+        "status": status.get("name"), "status_category": (status.get("statusCategory") or {}).get("key"),
+        "resolution": (f.get("resolution") or {}).get("name"), "resolution_date": f.get("resolutiondate"),
+        "priority": (f.get("priority") or {}).get("name"),
+        "assignee": (f.get("assignee") or {}).get("displayName"),
+        "fix_versions": [v["name"] for v in f.get("fixVersions", [])],
+        "labels": f.get("labels", []), "components": [c["name"] for c in f.get("components", [])],
+        "parent": f["parent"]["key"] if f.get("parent") else None,
+        "issue_links": [_link(l) for l in f.get("issuelinks", [])],
+        "updated": f.get("updated"),
+    }
+
+
 def issue_id(key: str) -> str:
     return client().get(f"issue/{key}", params={"fields": "summary"})["id"]
 
@@ -226,6 +251,29 @@ def add_comment(key: str, body_file: str, dry_run: bool) -> dict:
     return {"ok": True, "dry_run": dry_run, "comment_id": res.get("id")}
 
 
+def post_comment(draft_path: str, dry_run: bool) -> dict:
+    """Post the body of an approved comment draft (e.g. a bug verification result) to its issue."""
+    p = Path(draft_path)
+    if not p.is_absolute():
+        p = repo_root() / p
+    meta, body = read_front_matter(p)
+    if meta.get("comment_id"):
+        die(f"Draft already posted as comment {meta['comment_id']} on {meta.get('issue')}.")
+    if not dry_run and (meta.get("approval") != "approved" or not meta.get("approved_by")):
+        die("Comment draft is not approved. A human must approve it first "
+            "(front matter: approval: approved, approved_by: <name>).", code=3)
+    issue = validate_key(meta.get("issue") or "")
+    text = re.sub(r"<!--.*?-->", "", body, flags=re.S).strip()  # template guidance comments are not posted
+    if not text:
+        die(f"{p} has an empty body.")
+    res = client(dry_run).post(f"issue/{issue}/comment", json={"body": md_to_adf(text)})
+    result = {"ok": True, "dry_run": dry_run, "issue": issue, "comment_id": res.get("id")}
+    if not dry_run:
+        meta.update(approval="posted", comment_id=res.get("id"))
+        write_front_matter(p, meta, body)
+    return result
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -233,6 +281,9 @@ def main() -> None:
     sub.add_parser("download-attachments").add_argument("key")
     sb = sub.add_parser("search-bugs"); sb.add_argument("key"); sb.add_argument("--text")
     sub.add_parser("issue-id").add_argument("key")
+    sub.add_parser("get-issue").add_argument("key")
+    pc = sub.add_parser("post-comment"); pc.add_argument("--draft", required=True)
+    pc.add_argument("--dry-run", action="store_true")
     cb = sub.add_parser("create-bug"); cb.add_argument("--draft", required=True); cb.add_argument("--dry-run", action="store_true")
     cm = sub.add_parser("add-comment"); cm.add_argument("key"); cm.add_argument("--body-file", required=True)
     cm.add_argument("--dry-run", action="store_true")
@@ -252,6 +303,10 @@ def main() -> None:
         out({"key": a.key, "id": issue_id(validate_key(a.key))})
     elif a.cmd == "create-bug":
         out(create_bug(a.draft, a.dry_run))
+    elif a.cmd == "get-issue":
+        out(get_issue(validate_key(a.key)))
+    elif a.cmd == "post-comment":
+        out(post_comment(a.draft, a.dry_run))
     elif a.cmd == "add-comment":
         out(add_comment(validate_key(a.key), a.body_file, a.dry_run))
 
