@@ -404,3 +404,6 @@ Start with `.claude/scripts/qe-doctor.sh --online`. It catches most of these.
 | `/qe-impact` selects nothing for a change you know matters | That story has no `02-traceability.json`, or its evidence points at other files. Run `/qe-trace` for it. The report also lists the change under coverage gaps |
 | `/qe-heal` marks a locator `unverifiable` | The frontend builds that id from a JS expression. The agent reads the component to confirm the prefix |
 | `sync` / `create-bug` / `create-mr` exits with code 3 | The draft isn't approved, or the test cases changed after approval. Approve it through `/qe-testcases`, `/qe-bugs` or `/qe-pr` |
+
+## License
+MIT. See [LICENSE](LICENSE).
