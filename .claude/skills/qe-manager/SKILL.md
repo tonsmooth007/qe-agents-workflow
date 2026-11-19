@@ -72,6 +72,10 @@ Adding test cases later (e.g. after a scope change) goes through the same review
 created, and existing keys are kept.
 
 ### 4. automation → `robot-automation`
+The agent's first step is to create or switch to the story branch (`story_branch.py`). If it reports
+uncommitted changes on another branch (exit 4), show the user the files and ask them to commit or stash.
+Don't do it for them. Then re-run the phase. After the phase, check that `state.json` has `branch` set and that
+it's the branch that's checked out.
 If it reports **locator gaps**, show them and ask: **Keep the affected tests blocked and continue
 (Recommended)** / **Allow a role/text fallback for these elements** / **Pause for the FE team**. Pass the
 answer to the agent if it needs to re-run. The dry-run must pass before you mark the phase `done`.

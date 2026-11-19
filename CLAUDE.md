@@ -50,6 +50,8 @@ Templates for every artifact are in `.claude/templates/`. Agents must follow the
 | Script | Purpose |
 |---|---|
 | `story_state.py` | init / status / set-phase / set / log for `state.json` |
+| `test_credentials.py` | lists the RBAC roles in the root `.env` (`COMS_<ROLE>_USERNAME/PASSWORD`) without values; `--require ROLE ...` exits 5 if any is missing |
+| `story_branch.py` | creates or switches to the story branch `qe/<KEY>-<slug>` from the latest `origin/<target_branch>` (run by robot-automation before any test code); `--check` verifies it |
 | `jira_cli.py` | get-story, download-attachments, search-bugs, issue-id, **create-bug** (approved drafts only), add-comment |
 | `zephyr_cli.py` | list, get, **approve** (records the human's test case approval + fingerprint), **sync** (create + link test cases; approved drafts only), **sync-results** (required after every triage: one cycle per story and env, executions with triage notes, Blocked for locator gaps), **link-bug** (filed bug → failed executions), create-cycle and post-executions (low-level) |
 | `gitlab_cli.py` | mr-status, **create-mr** (approved drafts only) |
@@ -62,6 +64,20 @@ Templates for every artifact are in `.claude/templates/`. Agents must follow the
 
 Every command that writes externally supports `--dry-run`. Credentials come from `.claude/.env` and never appear in
 files, commits or output.
+
+## Test credentials (RBAC)
+- The application uses role-based access control. Each test role's login is in the **test repo's root `.env`**
+  (not `.claude/.env`) as `COMS_<ROLE>_USERNAME` and `COMS_<ROLE>_PASSWORD`, e.g. `COMS_ADMIN_*`,
+  `COMS_UNDERWRITER_*`.
+- `run_robot.py` loads the root `.env` into every Robot run, so tests use `%{COMS_<ROLE>_USERNAME}` /
+  `%{COMS_<ROLE>_PASSWORD}`.
+- Find out which roles exist with `python3 .claude/scripts/test_credentials.py`. It shows names and set/empty
+  flags, never values. **Never read, print, grep or copy `.env`**, and never write usernames or passwords into
+  tests, variable files, `.stories/`, Zephyr, Jira, commits or chat.
+- Type passwords with Browser's `Fill Secret` (`%COMS_<ROLE>_PASSWORD`), and wrap API logins in
+  `Set Log Level    NONE`, so values never reach `log.html`.
+- A role a test needs but that isn't in the root `.env` is a **credential gap**: tag the test
+  `blocked-credentials` and report the variable names to add. Never substitute another role.
 
 ## Python environment
 - Run all harness scripts with `python3` from PATH. That's the activated venv the user started Claude Code from.
@@ -82,9 +98,10 @@ files, commits or output.
 3. **Traceability tags** on every Robot test: `<ZEPHYR-KEY>  <STORY-KEY>  api|ui`, one Robot test per
    Zephyr test case.
 4. **No `Sleep`.** Use Browser Library auto-waits and assertion operators, or `Wait For Elements State`.
-5. **No secrets or real PII** in tests, artifacts, bug reports or commits. Use synthetic loan/applicant data
-   and `%{ENV}` variables for credentials.
-6. **Never** force-push, rewrite pushed history, `git add -A`, or stage `.stories/`, `results/` or `.claude/.env`.
+5. **No secrets or real PII** in tests, artifacts, bug reports or commits. Use synthetic loan/applicant data,
+   and only `%{COMS_<ROLE>_USERNAME}` / `%{COMS_<ROLE>_PASSWORD}` for logins.
+6. **Test code is written only on the story branch** (`story_branch.py`), never on `main` or the target branch.
+   **Never** force-push, rewrite pushed history, `git add -A`, or stage `.stories/`, `results/` or `.claude/.env`.
 7. **Every execution is synced to Zephyr Scale** (`sync-results`) after triage, including fix-loop re-runs.
    A failed sync is reported, never skipped.
 8. Evidence over assumption: traceability ratings and triage categories must cite file:line, log lines or

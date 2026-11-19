@@ -15,12 +15,14 @@ Jira key. Read `.stories/<KEY>/state.json` (branch), `04-automation.md`, `05-res
 `.claude/qe.config.yaml` (`gitlab`, `test_repo.stageable_paths`), `CLAUDE.md`.
 
 ## Steps
-1. Confirm you are on the story branch (`git branch --show-current`); if not, stop and report.
+1. Confirm you are on the story branch: `python3 .claude/scripts/story_branch.py <KEY> --check`. Exit 4
+   means you aren't. Stop and report; don't switch branches yourself.
 2. Review the diff (`git status --porcelain`, `git diff`) as a code reviewer:
    - Only paths under `test_repo.stageable_paths` may be included. Never stage `.stories/`, `results/`,
      `.claude/.env`, `output.xml`, `log.html`, browser artefacts.
    - Check: data-testid-only locators; Zephyr + story + api/ui tags on every new test; no `Sleep`;
-     no hard-coded credentials/tokens/URLs (must come from variables/env); no debug leftovers; reuse of
+     no hard-coded credentials/tokens/URLs (role logins only via `%{COMS_<ROLE>_*}`, passwords typed with
+     `Fill Secret`, never logged); no debug leftovers; reuse of
      existing keywords; consistent formatting. Fix trivial issues yourself (formatting, tags); report anything substantive.
    - Run `python3 .claude/scripts/run_robot.py <KEY> --dryrun` once more.
 3. Stage explicitly by path (`git add <files>` — never `git add -A`/`.`), then commit:

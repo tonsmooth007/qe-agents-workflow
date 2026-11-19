@@ -30,6 +30,10 @@ Jira key. Read `.stories/<KEY>/01-story.md`, `.stories/<KEY>/02-traceability.jso
    - ACs rated `not_found` in traceability: still design the test (it documents expected behaviour) and add
      label `expected-fail`.
    - Keep it lean: every AC ≥1 case; avoid redundant cases that test the same equivalence class.
+   - **RBAC:** run `python3 .claude/scripts/test_credentials.py` to see which test roles exist (names only).
+     State the role in each precondition using those exact names (e.g. "Logged in as UNDERWRITER"). For ACs
+     about permissions, add negative cases: a role that must NOT see or do something. If the story needs a
+     role that isn't in the list, still write the case and flag the missing role in your return.
 3. Each test case: name `"<KEY> | <API|UI> | <behaviour>"`, objective, precondition (user/role, application
    state, data), concrete `test_data` (no real customer data; synthetic values), atomic steps each with an
    expected result, `ac_ids`, `technique`, `priority` (High = core borrower flow/money/compliance).
@@ -50,5 +54,6 @@ Jira key. Read `.stories/<KEY>/01-story.md`, `.stories/<KEY>/02-traceability.jso
 - AC coverage: AC → local ids, and any AC without a case (with the reason)
 - Cases labelled `expected-fail` (ACs that traceability rated not_found/partial)
 - Existing Zephyr cases that will be reused, and new cases still to be created
+- Roles used per case, and any role the story needs that has no credentials in the root .env
 - Assumptions or test data choices the reviewer should check
 - Dry-run result and the draft path

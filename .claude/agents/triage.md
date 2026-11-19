@@ -31,6 +31,9 @@ Jira key, optional environment (default from config). Read `.stories/<KEY>/03-te
      vs AC, bad keyword, order dependency).
    - `environment` — 5xx from infra/gateway, DNS/timeouts, service down, auth/SSO outage, missing config, deploy not containing the feature (compare the deployed version with the story's branch if visible).
    - `test_data` — preconditions not met (user locked, application in wrong state, credit bureau stub data).
+     **Login or auth failures for a role** (401, "invalid credentials", account locked or expired, or a
+     `COMS_<ROLE>_*` variable not set) are `test_data`, never `product_defect`. Name the role and variable, never
+     the value. A wrong role being *allowed* to do something it shouldn't is a `product_defect` (RBAC bug).
    - `flaky` — failed then passed on re-run with no code/data difference; propose hardening.
    When unsure between product and test defect, state confidence `low` and list what would disambiguate.
 4. Add `triage_category`, `triage_confidence`, `triage_summary` to each failing/flaky test entry in

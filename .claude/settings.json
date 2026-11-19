@@ -5,6 +5,8 @@
       "Bash(.claude/scripts/qe-doctor.sh:*)",
       "Bash(bash .claude/scripts/qe-doctor.sh:*)",
       "Bash(python3 .claude/scripts/story_state.py:*)",
+      "Bash(python3 .claude/scripts/story_branch.py:*)",
+      "Bash(python3 .claude/scripts/test_credentials.py:*)",
       "Bash(python3 .claude/scripts/trace_score.py:*)",
       "Bash(python3 .claude/scripts/testid_index.py:*)",
       "Bash(python3 .claude/scripts/robot_summary.py:*)",
@@ -48,7 +50,8 @@
       "Read(./.claude/.env)",
       "Read(./.env)",
       "Bash(cat .claude/.env:*)",
-      "Bash(cat .env:*)"
+      "Bash(cat .env:*)",
+      "Bash(source .env:*)"
     ]
   }
 }

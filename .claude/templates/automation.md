@@ -24,6 +24,15 @@
 | Element | Component file:line | Suggested data-testid | Blocking tests |
 |---|---|---|---|
 
+## Roles used (RBAC: credentials from the root .env, values never written here)
+| Role | Variables | Used by tests |
+|---|---|---|
+| UNDERWRITER | `%{COMS_UNDERWRITER_USERNAME}` / `%{COMS_UNDERWRITER_PASSWORD}` | LOAN-T101, LOAN-T102 |
+
+## Credential gaps (add these to the test repo's root .env)
+| Role | Missing variables | Blocking tests |
+|---|---|---|
+
 ## Reused keywords
 - {{existing keyword}} ({{resource file}})
 

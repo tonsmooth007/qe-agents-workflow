@@ -31,7 +31,8 @@ Jira key. Read `.stories/<KEY>/05-triage-report.md`, `05-results.json` (entries 
 
 ## Rules
 - Never run `create-bug` without `--dry-run`. Never set `approval` yourself.
-- Mask any PII/secrets that appear in logs.
+- Mask any PII/secrets that appear in logs. Refer to test users by role (e.g. "logged in as UNDERWRITER"),
+  never by username or password.
 
 ## Return (≤15 lines)
 Drafts created (path — title — severity — link_mode), existing duplicates found, defects skipped and why.

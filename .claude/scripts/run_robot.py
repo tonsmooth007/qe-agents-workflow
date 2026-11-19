@@ -8,10 +8,14 @@ Usage:
 Selection defaults to tests tagged with the story key. Each run goes to
 .stories/KEY/results/run-N/. Robot's own exit code (= number of failed tests) is
 NOT treated as an error; only usage/data errors (rc >= 252) are.
+
+The test repo's root .env (RBAC role credentials COMS_<ROLE>_USERNAME / COMS_<ROLE>_PASSWORD) is loaded into
+every Robot run, so tests can use %{COMS_<ROLE>_USERNAME}. Variables already exported in the shell win.
 """
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import sys
 
@@ -42,10 +46,35 @@ def base_args(env_name: str) -> list[str]:
     return args
 
 
+def test_repo_env() -> dict:
+    """Environment for Robot: this process's env plus the test repo's root .env (RBAC role credentials
+    COMS_<ROLE>_USERNAME/PASSWORD, used in tests as %{...}). Variables already exported in the shell win."""
+    env = dict(os.environ)
+    path = repo_root() / ".env"
+    if not path.is_file():
+        return env
+    try:
+        from dotenv import dotenv_values
+        values = {k: v for k, v in dotenv_values(path).items() if v is not None}
+    except ImportError:
+        values = {}
+        for line in path.read_text(encoding="utf-8", errors="ignore").splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, v = line.split("=", 1)
+                k = k.strip()
+                if k.startswith("export "):
+                    k = k[len("export "):].strip()
+                values[k] = v.strip().strip('"').strip("'")
+    for k, v in values.items():
+        env.setdefault(k, v)
+    return env
+
+
 def run(cmd: list[str]) -> int:
-    print("$ " + " ".join(cmd), file=sys.stderr)
+    print("$ " + " ".join(cmd), file=sys.stderr)   # args only; credential values never go on the command line
     # Robot console output -> stderr so stdout stays pure JSON
-    return subprocess.run(cmd, cwd=repo_root(), stdout=sys.stderr).returncode
+    return subprocess.run(cmd, cwd=repo_root(), stdout=sys.stderr, env=test_repo_env()).returncode
 
 
 def main() -> None:

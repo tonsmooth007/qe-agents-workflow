@@ -219,7 +219,7 @@ done
 [ -z "$missing" ] && pass "Phase commands in .claude/commands/" || fail "Missing commands:$missing"
 
 missing=""
-for s in common.py adf.py story_state.py jira_cli.py zephyr_cli.py gitlab_cli.py trace_score.py testid_index.py run_robot.py robot_summary.py; do
+for s in common.py adf.py story_state.py story_branch.py test_credentials.py jira_cli.py zephyr_cli.py gitlab_cli.py trace_score.py testid_index.py run_robot.py robot_summary.py; do
   [ -f "$HARNESS/scripts/$s" ] || missing="$missing $s"
 done
 [ -z "$missing" ] && pass "Helper scripts in .claude/scripts/" || fail "Missing scripts:$missing"
@@ -243,7 +243,7 @@ if git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   else
     fail "No 'origin' remote" "The PR phase pushes to origin. Run: git remote add origin <gitlab url>"
   fi
-  for p in .claude/.env .stories/ .claude/settings.local.json; do
+  for p in .env .claude/.env .stories/ .claude/settings.local.json; do
     probe="$p"; [ "${p%/}" != "$p" ] && probe="${p}probe"
     if git -C "$ROOT" check-ignore -q "$probe" 2>/dev/null; then pass "$p is git-ignored"
     else fail "$p is NOT git-ignored" "Append the harness .gitignore entries to the repo's .gitignore"; fi
@@ -390,8 +390,6 @@ else:
         if line and not line.startswith("#") and "=" in line:
             k, v = line.split("=", 1)
             vals[k.strip()] = v.strip().strip('"').strip("'")
-    if (root / ".env").is_file():
-        emit("WARN", "A .env exists at the repo root and is IGNORED; only .claude/.env is loaded")
 for k in ("JIRA_BASE_URL", "JIRA_EMAIL", "JIRA_API_TOKEN", "ZEPHYR_API_TOKEN", "GITLAB_URL", "GITLAB_TOKEN"):
     v = vals.get(k) or os.environ.get(k, "")
     if not v:
@@ -400,8 +398,37 @@ for k in ("JIRA_BASE_URL", "JIRA_EMAIL", "JIRA_API_TOKEN", "ZEPHYR_API_TOKEN", "
         emit("FAIL", f"{k} still has the placeholder value")
     else:
         emit("PASS", f"{k} is set")
-for k in ("QE_TEST_USER", "QE_TEST_PASSWORD"):
-    emit("PASS" if (vals.get(k) or os.environ.get(k)) else "WARN", f"{k} is {'set' if (vals.get(k) or os.environ.get(k)) else 'empty (needed if your Robot tests log in with it)'}")
+
+# ---- RBAC test credentials (root .env of the test repo)
+section("Test roles")
+import re
+root_env = root / ".env"
+if not root_env.is_file():
+    emit("FAIL", "No .env in the test repo root, so the tests have no role credentials",
+         "Create it with COMS_<ROLE>_USERNAME / COMS_<ROLE>_PASSWORD for each role")
+else:
+    pairs = {}
+    for line in root_env.read_text(errors="ignore").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, v = line.split("=", 1)
+        k = k.strip()
+        if k.startswith("export "):
+            k = k[7:].strip()
+        m = re.match(r"^COMS_([A-Z0-9_]+?)_(USERNAME|PASSWORD)$", k)
+        if m:
+            pairs.setdefault(m.group(1), {})[m.group(2)] = bool(v.strip().strip('"').strip("'"))
+    if not pairs:
+        emit("FAIL", "Root .env has no COMS_<ROLE>_USERNAME / COMS_<ROLE>_PASSWORD pairs",
+             "Add one pair per RBAC role the tests use")
+    for role in sorted(pairs):
+        p = pairs[role]
+        missing = [f"COMS_{role}_{x}" for x in ("USERNAME", "PASSWORD") if not p.get(x)]
+        if missing:
+            emit("FAIL", f"Role {role} is incomplete: {', '.join(missing)} missing or empty", "Set both values in the root .env")
+        else:
+            emit("PASS", f"Role {role}: COMS_{role}_USERNAME / COMS_{role}_PASSWORD set")
 
 if not online:
     raise SystemExit

@@ -9,7 +9,8 @@ automated tests, synced results, bugs and a merge request:
  2 traceability  requirement-traceability  static analysis of React / Go / Spring Boot / MySQL against the ACs → score
                  ── GATE: score ≥ 75% (.claude/scripts/trace_score.py): stop / override with a reason / re-scan
  3 test_cases    zephyr-test-case          designs test cases (draft) → HUMAN REVIEWS & APPROVES → Zephyr Scale
- 4 automation    robot-automation          Robot (Browser + RequestsLibrary); data-testid locators only
+ 4 automation    robot-automation          creates the story branch qe/<KEY>-<slug> first, then writes Robot tests
+                                           (Browser + RequestsLibrary); data-testid locators only
  5 triage        triage                    run → rerun failures → classify → SYNC RESULTS TO ZEPHYR test cycle;
                                            test defects loop back to 4 (max 2), and every re-run is synced again
  6 bugs          bug                       drafts → HUMAN APPROVES each → Jira (child of / related to the story)
@@ -28,7 +29,7 @@ at any point.
 | Jira User Story Agent | `.claude/agents/jira-user-story.md` | sonnet | blue | Story, ACs, attachments (mockups/PDFs), test type |
 | Requirement Traceability Agent | `.claude/agents/requirement-traceability.md` | opus | purple | Code-vs-AC evidence matrix, 75% gate |
 | Zephyr Test Case Agent | `.claude/agents/zephyr-test-case.md` | sonnet | cyan | Test case design as a draft for your review (no Zephyr writes) |
-| Robot Framework Automation Agent | `.claude/agents/robot-automation.md` | sonnet | green | Robot suites, data-testid locators, test-defect fixes |
+| Robot Framework Automation Agent | `.claude/agents/robot-automation.md` | sonnet | green | Creates the story branch, then Robot suites, data-testid locators, test-defect fixes |
 | Triage Agent | `.claude/agents/triage.md` | opus | orange | Runs tests, classifies failures, syncs results to Zephyr |
 | Bug Agent | `.claude/agents/bug.md` | haiku | red | Bug drafts with duplicate check (no filing) |
 | Pull Request Agent | `.claude/agents/pull-request.md` | haiku | pink | Diff review, commit, MR draft (no push) |
@@ -59,7 +60,8 @@ of 15 lines or fewer, which keeps the main session small.
    the two and keep the "Robot Framework conventions" section accurate, because the automation agent follows it.
 2. Activate the virtualenv you run Robot from, then `pip install -r requirements-qe.txt`, and run
    `rfbrowser init` if you haven't already.
-3. `cp .claude/.env.example .claude/.env` and fill in the Jira, Zephyr and GitLab tokens and the test user credentials.
+3. `cp .claude/.env.example .claude/.env` and fill in the Jira, Zephyr and GitLab tokens. The test role
+   credentials go in the root `.env` instead (see "Test credentials" below).
 4. Edit `.claude/qe.config.yaml`:
    - `jira`: project key, the AC custom field id (or null), and the bug issue types. A child bug needs a
      sub-task type.
@@ -129,6 +131,33 @@ two of them.
 - **The rules for each phase live only in `.claude/skills/qe-manager/SKILL.md`.** The commands read them
   from there, so both ways of running behave the same.
 - **You can also call any agent directly,** e.g. *"use the triage agent on LOAN-123 against uat"*.
+
+## Test credentials (RBAC)
+The application uses role-based access control, so tests log in as different roles. There are two `.env` files,
+both git-ignored:
+
+| File | Holds | Used by |
+|---|---|---|
+| `.env` (test repo root) | `COMS_<ROLE>_USERNAME` and `COMS_<ROLE>_PASSWORD`, one pair per role | Robot tests (`%{COMS_<ROLE>_USERNAME}`), loaded into every run by `run_robot.py` |
+| `.claude/.env` | Jira, Zephyr Scale and GitLab tokens | the harness scripts |
+
+```bash
+# .env (test repo root)
+COMS_ADMIN_USERNAME=...
+COMS_ADMIN_PASSWORD=...
+COMS_UNDERWRITER_USERNAME=...
+COMS_UNDERWRITER_PASSWORD=...
+```
+
+- **Roles:** `python3 .claude/scripts/test_credentials.py` lists them (names only, never values). The agents use
+  it to pick the right role for each test case and to write negative RBAC cases. The doctor checks that every
+  pair is complete.
+- **In tests:** `%{COMS_<ROLE>_USERNAME}` / `%{COMS_<ROLE>_PASSWORD}`, through a role-based login keyword. Passwords
+  are typed with `Fill Secret`, and API logins run under `Set Log Level    NONE`, so they never show in `log.html`.
+- **Values stay private:** Claude Code is blocked from reading either `.env`. No username or password is ever
+  written into tests, `.stories/`, Zephyr, Jira or commits.
+- **Missing roles:** if a test needs a role that isn't in `.env`, it's tagged `blocked-credentials`, posted to
+  Zephyr as Blocked, and the variable names to add are listed in `04-automation.md`.
 
 ## Zephyr Scale integration
 | When | What is written | Command |
@@ -218,6 +247,8 @@ Start with `.claude/scripts/qe-doctor.sh --online`. It catches most of these.
 |---|---|
 | `get-story` returns `acceptance_criteria_md: null` | Set `jira.acceptance_criteria_field`, or make sure the description has an "Acceptance Criteria" heading |
 | `robot: command not found`, or `No module named robot / Browser / RequestsLibrary` | Claude Code was started without the venv active. Exit, `source .venv/bin/activate`, start `claude` again |
+| Automation stops with "Uncommitted changes on '<branch>'" (exit 4) | Commit or stash your local changes, then re-run `/qe-automate`. The harness never stashes or discards them for you |
+| Tests fail at login with 401 / "invalid credentials" | Check that role's `COMS_<ROLE>_*` pair in the root `.env` (`test_credentials.py` shows which are set). Triage classes this as `test_data`, not a bug |
 | `run_robot.py` fails with rc 252 | No tests are tagged with the story key, or a suite path or syntax is wrong. Run `/qe-automate --fix` or check the tags |
 | Zephyr sync fails | Check the token and `zephyr.project_key`. Names in `environment_map` and `status_map` must exist in Zephyr. Retry with `/qe-sync-results <KEY>` |
 | A Robot test is missing in Zephyr | It has no Zephyr key tag (see `unmapped_robot_tests` in the sync output) |
