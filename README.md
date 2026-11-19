@@ -250,14 +250,14 @@ What `sync-results` posts:
 - `.claude/settings.json` sets the permissions:
   - **ask:** `create-bug`, `add-comment`, `create-mr`, `git push`, `git commit`, and Zephyr test-case
     creation, cycle creation and execution posting run directly, so Claude Code prompts you.
-  - **allow:** read-only commands, recording your test case approval (`approve`), and the required results sync
-    (`sync-results`, `link-bug`).
+  - **allow:** read-only commands, recording your test case approval (`approve`), the required results sync
+    (`sync-results`, `link-bug`), and the exploratory browser commands (`playwright-cli`, `explore_login.py`).
   - **deny:** force-push and reading `.claude/.env`.
 - Every command that writes externally supports `--dry-run`.
 - **Exploratory testing never writes externally.** It's limited to `exploratory.allowed_envs` (enforced by
-  `explore_login.py`), uses synthetic data only, and leaves its findings for you to review. To avoid a
-  prompt on every browser action, allow `Bash(playwright-cli:*)`, `Bash(npx --no-install playwright:*)` and
-  `Bash(python3 .claude/scripts/explore_login.py:*)` in `.claude/settings.json`.
+  `explore_login.py`), uses synthetic data only, and leaves its findings for you to review. `.claude/settings.json`
+  allows `Bash(playwright-cli:*)`, `Bash(npx --no-install playwright:*)` and
+  `Bash(python3 .claude/scripts/explore_login.py:*)`, so browser actions don't prompt.
 
 ## Layout
 ```
